@@ -1,0 +1,409 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no">
+<title>Math Dino Run</title>
+<style>
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: #f7f7f7; color: #333;
+    font-family: "Comic Sans MS", "Trebuchet MS", sans-serif;
+    display: flex; flex-direction: column; align-items: center;
+    min-height: 100vh; user-select: none; -webkit-user-select: none;
+  }
+  h1 { margin: 12px 0 4px; font-size: 28px; }
+  #hud {
+    width: 100%; max-width: 800px; display: flex; justify-content: space-between;
+    padding: 6px 12px; font-size: 20px; font-weight: bold;
+  }
+  #wrap { position: relative; width: 100%; max-width: 800px; padding: 0 8px; }
+  canvas { width: 100%; background: #fff; border: 3px solid #333; border-radius: 12px; display: block; touch-action: none; }
+  .overlay {
+    position: absolute; inset: 0 8px; background: rgba(255,255,255,0.96);
+    border-radius: 12px; display: none; flex-direction: column;
+    align-items: center; justify-content: center; text-align: center; padding: 12px;
+  }
+  .overlay.show { display: flex; }
+  .overlay h2 { margin: 4px 0; font-size: 28px; }
+  .overlay p { margin: 4px 0; font-size: 18px; }
+  .problem { font-size: 48px; font-weight: bold; margin: 8px 0; }
+  .choices { display: flex; gap: 10px; flex-wrap: wrap; justify-content: center; }
+  button {
+    font-family: inherit; font-size: 28px; font-weight: bold;
+    min-width: 76px; padding: 10px 14px; border: 3px solid #333; border-radius: 14px;
+    background: #ffe066; cursor: pointer;
+  }
+  button:active { transform: scale(0.95); }
+  button.wrong { background: #ff8787; }
+  button.right { background: #8ce99a; }
+  button.big { background: #74c0fc; font-size: 26px; padding: 12px 28px; }
+  .stars { font-size: 32px; letter-spacing: 6px; }
+  .msg { font-size: 22px; min-height: 30px; font-weight: bold; }
+  #help { font-size: 16px; color: #666; margin: 10px; text-align: center; }
+  @media (max-width: 600px) {
+    .problem { font-size: 36px; }
+    button { font-size: 22px; min-width: 56px; padding: 8px 10px; }
+    .overlay h2 { font-size: 22px; }
+  }
+</style>
+</head>
+<body>
+<h1>🦖 Math Dino Run 🧮</h1>
+<div id="hud">
+  <span id="hudLevel">Level 1 / 50</span>
+  <span id="hudCoupons">🎟️🎟️🎟️</span>
+  <span id="hudScore">Score 0</span>
+</div>
+<div id="wrap">
+  <canvas id="game" width="800" height="260"></canvas>
+
+  <div class="overlay show" id="startScreen">
+    <h2>🦖 Math Dino Run</h2>
+    <p>Jump over the cactus! Finish a level, then solve 3 math problems.</p>
+    <p>You have <b>3 coupons 🎟️</b>. A wrong answer uses one coupon.</p>
+    <p id="bestText"></p>
+    <button class="big" id="startBtn">▶ Start!</button>
+  </div>
+
+  <div class="overlay" id="mathScreen">
+    <h2 id="mathTitle">🧮 Math Gate!</h2>
+    <div class="stars" id="mathStars">☆☆☆</div>
+    <div class="problem" id="problem">2 + 3 = ?</div>
+    <div class="choices" id="choices"></div>
+    <div class="msg" id="mathMsg"></div>
+  </div>
+
+  <div class="overlay" id="msgScreen">
+    <h2 id="msgTitle"></h2>
+    <p id="msgText"></p>
+    <button class="big" id="msgBtn">OK</button>
+  </div>
+</div>
+<div id="help">Space / ↑ / tap = jump &nbsp;•&nbsp; ↓ = duck</div>
+
+<script>
+// ---------- Settings ----------
+const MAX_LEVEL = 50;
+const LEVEL_DISTANCE = 1500;        // distance to run per level
+const START_SPEED = 5;
+const SPEED_PER_LEVEL = 0.15;       // level 50 ≈ 12.4
+const COUPONS = 3;
+
+// ---------- Math problems (each tier covers 5 levels) ----------
+const rnd = (a, b) => a + Math.floor(Math.random() * (b - a + 1));
+
+function makeProblem(level) {
+  const tier = Math.ceil(level / 5); // 1..10
+  let a, b, op;
+  switch (tier) {
+    case 1: // single digit +, sum <= 10
+      a = rnd(0, 9); b = rnd(0, 10 - a); op = '+'; break;
+    case 2: // single digit + and -
+      if (Math.random() < 0.5) { a = rnd(1, 9); b = rnd(1, 9); op = '+'; }
+      else { a = rnd(1, 9); b = rnd(0, a); op = '−'; }
+      break;
+    case 3: // within 20
+      if (Math.random() < 0.5) { a = rnd(3, 12); b = rnd(2, 20 - a); op = '+'; }
+      else { a = rnd(10, 20); b = rnd(1, 9); op = '−'; }
+      break;
+    case 4: { // two-digit + no carry
+      const t1 = rnd(1, 7), t2 = rnd(1, 9 - t1), o1 = rnd(0, 8), o2 = rnd(0, 9 - o1);
+      a = t1 * 10 + o1; b = t2 * 10 + o2; op = '+'; break;
+    }
+    case 5: { // two-digit − no borrow
+      const t1 = rnd(2, 9), t2 = rnd(1, t1 - 1), o1 = rnd(1, 9), o2 = rnd(0, o1);
+      a = t1 * 10 + o1; b = t2 * 10 + o2; op = '−'; break;
+    }
+    case 6: // two-digit with carry / borrow
+      if (Math.random() < 0.5) { a = rnd(15, 69); b = rnd(15, 99 - a); op = '+'; }
+      else { a = rnd(30, 99); b = rnd(11, a - 5); op = '−'; }
+      break;
+    case 7: // ×2, ×5, ×10
+      a = [2, 5, 10][rnd(0, 2)]; b = rnd(1, 10); op = '×';
+      if (Math.random() < 0.5) [a, b] = [b, a];
+      break;
+    case 8: // times tables to 10
+      a = rnd(2, 10); b = rnd(2, 10); op = '×'; break;
+    case 9: // division
+      b = rnd(2, 10); a = b * rnd(1, 10); op = '÷'; break;
+    default: { // mixed
+      const k = rnd(0, 3);
+      if (k === 0) { a = rnd(20, 89); b = rnd(11, 99 - a); op = '+'; }
+      else if (k === 1) { a = rnd(40, 99); b = rnd(12, a - 3); op = '−'; }
+      else if (k === 2) { a = rnd(3, 12); b = rnd(3, 10); op = '×'; }
+      else { b = rnd(3, 10); a = b * rnd(2, 12); op = '÷'; }
+    }
+  }
+  const answer = op === '+' ? a + b : op === '−' ? a - b : op === '×' ? a * b : a / b;
+  return { text: `${a} ${op} ${b} = ?`, answer, choices: makeChoices(answer) };
+}
+
+function makeChoices(ans) {
+  const set = new Set([ans]);
+  const spread = Math.max(3, Math.ceil(ans * 0.2));
+  let tries = 0;
+  while (set.size < 5 && tries++ < 200) {
+    const c = ans + rnd(-spread, spread);
+    if (c >= 0) set.add(c);
+  }
+  let n = ans + 1;
+  while (set.size < 5) set.add(n++);
+  return [...set].sort(() => Math.random() - 0.5);
+}
+
+// ---------- Game state ----------
+const canvas = document.getElementById('game');
+const ctx = canvas.getContext('2d');
+const W = canvas.width, H = canvas.height, GROUND = H - 40;
+const $ = id => document.getElementById(id);
+
+let level, coupons, score, distance, speed, obstacles, clouds, nextSpawn, running, frame;
+const dino = { x: 60, y: 0, w: 44, h: 48, vy: 0, ducking: false, onGround: true };
+let best = { level: 1, score: 0 };
+try { best = JSON.parse(localStorage.getItem('dinoMathBest')) || best; } catch (e) {}
+
+function saveBest() {
+  if (level > best.level || score > best.score) {
+    best = { level: Math.max(level, best.level), score: Math.max(score, best.score) };
+    try { localStorage.setItem('dinoMathBest', JSON.stringify(best)); } catch (e) {}
+  }
+}
+
+function newGame() {
+  level = 1; coupons = COUPONS; score = 0;
+  startLevel();
+}
+
+function startLevel() {
+  distance = 0;
+  speed = START_SPEED + (level - 1) * SPEED_PER_LEVEL;
+  obstacles = []; nextSpawn = 60;
+  clouds = clouds || [{ x: 200, y: 50 }, { x: 550, y: 80 }];
+  dino.y = GROUND - dino.h; dino.vy = 0; dino.onGround = true; dino.ducking = false;
+  updateHud();
+  running = true;
+}
+
+function updateHud() {
+  $('hudLevel').textContent = `Level ${level} / ${MAX_LEVEL}`;
+  $('hudCoupons').textContent = '🎟️'.repeat(coupons) + '▫️'.repeat(COUPONS - coupons);
+  $('hudScore').textContent = `Score ${score}`;
+}
+
+// ---------- Input ----------
+function jump() {
+  if (!running) return;
+  if (dino.onGround) { dino.vy = -13; dino.onGround = false; }
+}
+document.addEventListener('keydown', e => {
+  if (['Space', 'ArrowUp', 'ArrowDown'].includes(e.code)) e.preventDefault();
+  if (e.code === 'Space' || e.code === 'ArrowUp') jump();
+  if (e.code === 'ArrowDown') dino.ducking = true;
+});
+document.addEventListener('keyup', e => { if (e.code === 'ArrowDown') dino.ducking = false; });
+canvas.addEventListener('pointerdown', e => { e.preventDefault(); jump(); });
+
+// ---------- Obstacles ----------
+function spawnObstacle() {
+  const birds = level >= 16 && Math.random() < Math.min(0.35, 0.1 + level * 0.005);
+  if (birds) {
+    const high = Math.random() < 0.5;
+    obstacles.push({ type: 'bird', x: W, w: 40, h: 26, y: high ? GROUND - 75 : GROUND - 40 });
+  } else {
+    const n = level < 10 ? 1 : rnd(1, level < 30 ? 2 : 3);
+    const h = rnd(34, 50);
+    obstacles.push({ type: 'cactus', x: W, w: 18 * n + 4 * (n - 1), h, y: GROUND - h, n });
+  }
+  const minGap = 55 + speed * 4;
+  nextSpawn = rnd(minGap, minGap + 70) / (speed / 6);
+}
+
+function hit(a, b) {
+  const pad = 6;
+  return a.x + pad < b.x + b.w && a.x + a.w - pad > b.x &&
+         a.y + pad < b.y + b.h && a.y + a.h - pad > b.y;
+}
+
+// ---------- Main loop ----------
+function update() {
+  frame++;
+  // dino physics
+  dino.vy += 0.7;
+  dino.y += dino.vy;
+  const h = dino.ducking && dino.onGround ? 28 : 48;
+  dino.h = h;
+  if (dino.y >= GROUND - h) { dino.y = GROUND - h; dino.vy = 0; dino.onGround = true; }
+
+  // world
+  distance += speed / 6;
+  score += 1;
+  if (--nextSpawn <= 0 && distance < LEVEL_DISTANCE - 80) spawnObstacle();
+  obstacles.forEach(o => o.x -= speed);
+  obstacles = obstacles.filter(o => o.x + o.w > 0);
+  clouds.forEach(c => { c.x -= speed * 0.2; if (c.x < -60) { c.x = W + rnd(0, 200); c.y = rnd(30, 100); } });
+
+  for (const o of obstacles) {
+    if (hit(dino, o)) { crash(); return; }
+  }
+  if (distance >= LEVEL_DISTANCE && obstacles.length === 0) levelDone();
+  if (frame % 10 === 0) updateHud();
+}
+
+function draw() {
+  ctx.clearRect(0, 0, W, H);
+  // clouds
+  ctx.fillStyle = '#ddd';
+  clouds.forEach(c => { ctx.beginPath(); ctx.ellipse(c.x, c.y, 30, 12, 0, 0, Math.PI * 2); ctx.fill(); });
+  // ground
+  ctx.fillStyle = '#555';
+  ctx.fillRect(0, GROUND, W, 2);
+  for (let i = 0; i < 30; i++) {
+    const x = (i * 53 - distance * 6) % W;
+    ctx.fillRect((x + W) % W, GROUND + 8 + (i % 3) * 6, 6, 2);
+  }
+  // progress bar
+  const p = Math.min(1, distance / LEVEL_DISTANCE);
+  ctx.fillStyle = '#eee'; ctx.fillRect(W - 210, 12, 200, 14);
+  ctx.fillStyle = '#51cf66'; ctx.fillRect(W - 210, 12, 200 * p, 14);
+  ctx.strokeStyle = '#333'; ctx.strokeRect(W - 210, 12, 200, 14);
+  ctx.fillStyle = '#333'; ctx.font = '16px sans-serif'; ctx.fillText('🧮', W - 230, 25);
+
+  // obstacles
+  obstacles.forEach(o => {
+    if (o.type === 'cactus') {
+      ctx.fillStyle = '#2b8a3e';
+      for (let i = 0; i < o.n; i++) {
+        const x = o.x + i * 22;
+        ctx.fillRect(x + 5, o.y, 8, o.h);
+        ctx.fillRect(x, o.y + 12, 5, 4); ctx.fillRect(x, o.y + 6, 3, 10);
+        ctx.fillRect(x + 13, o.y + 18, 5, 4); ctx.fillRect(x + 15, o.y + 10, 3, 12);
+      }
+    } else {
+      ctx.fillStyle = '#7048e8';
+      const flap = Math.floor(frame / 10) % 2;
+      ctx.fillRect(o.x, o.y + 10, o.w, 8);
+      ctx.fillRect(o.x + 12, flap ? o.y : o.y + 18, 14, 8);
+      ctx.fillRect(o.x - 6, o.y + 10, 8, 4);
+    }
+  });
+  drawDino();
+}
+
+function drawDino() {
+  const { x, y, h } = dino;
+  ctx.fillStyle = '#495057';
+  if (h < 48) { // ducking
+    ctx.fillRect(x, y + 6, 54, 18);
+    ctx.fillRect(x + 40, y, 22, 14);
+    ctx.fillStyle = '#fff'; ctx.fillRect(x + 54, y + 3, 4, 4);
+  } else {
+    ctx.fillRect(x + 20, y, 24, 18);          // head
+    ctx.fillRect(x + 8, y + 16, 26, 22);      // body
+    ctx.fillRect(x, y + 20, 10, 8);           // tail
+    ctx.fillRect(x + 32, y + 24, 6, 4);       // arm
+    ctx.fillStyle = '#fff'; ctx.fillRect(x + 34, y + 4, 4, 4); // eye
+    ctx.fillStyle = '#495057';
+  }
+  // legs
+  ctx.fillStyle = '#495057';
+  const step = dino.onGround ? Math.floor(frame / 6) % 2 : 0;
+  ctx.fillRect(x + 12, y + h - 10, 6, step ? 10 : 6);
+  ctx.fillRect(x + 24, y + h - 10, 6, step ? 6 : 10);
+}
+
+function loop() {
+  if (running) update();
+  draw();
+  requestAnimationFrame(loop);
+}
+
+// ---------- Events ----------
+function showMsg(title, text, btn, onOk) {
+  $('msgTitle').textContent = title;
+  $('msgText').textContent = text;
+  $('msgBtn').textContent = btn;
+  $('msgScreen').classList.add('show');
+  $('msgBtn').onclick = () => { $('msgScreen').classList.remove('show'); onOk(); };
+}
+
+function crash() {
+  running = false;
+  showMsg('💥 Ouch!', `You hit a cactus. Try level ${level} again!`, '↻ Try Again', startLevel);
+}
+
+let mathIndex, current, stars;
+function levelDone() {
+  running = false;
+  saveBest();
+  mathIndex = 0; stars = 0;
+  $('mathTitle').textContent = `🧮 Math Gate — Level ${level}`;
+  $('mathScreen').classList.add('show');
+  nextProblem();
+}
+
+function nextProblem() {
+  current = makeProblem(level);
+  $('mathStars').textContent = '⭐'.repeat(stars) + '☆'.repeat(3 - stars);
+  $('problem').textContent = current.text;
+  $('mathMsg').textContent = `Problem ${mathIndex + 1} of 3`;
+  const box = $('choices');
+  box.innerHTML = '';
+  current.choices.forEach(c => {
+    const b = document.createElement('button');
+    b.textContent = c;
+    b.onclick = () => answer(b, c);
+    box.appendChild(b);
+  });
+}
+
+function answer(btn, value) {
+  if (btn.disabled) return;
+  if (value === current.answer) {
+    btn.classList.add('right');
+    [...$('choices').children].forEach(b => b.disabled = true);
+    stars++;
+    $('mathStars').textContent = '⭐'.repeat(stars) + '☆'.repeat(3 - stars);
+    $('mathMsg').textContent = ['Great job! 🎉', 'Awesome! 🌟', 'You got it! 🙌'][rnd(0, 2)];
+    setTimeout(() => {
+      mathIndex++;
+      if (mathIndex < 3) nextProblem();
+      else passGate();
+    }, 800);
+  } else {
+    btn.classList.add('wrong');
+    btn.disabled = true;
+    coupons--;
+    updateHud();
+    if (coupons <= 0) {
+      $('mathScreen').classList.remove('show');
+      saveBest();
+      showMsg('😢 No more coupons!', `You reached level ${level}. Let's start again from level 1!`, '↻ New Game', newGame);
+    } else {
+      $('mathMsg').textContent = `Oops! Try again. ${coupons} coupon${coupons > 1 ? 's' : ''} left 🎟️`;
+    }
+  }
+}
+
+function passGate() {
+  $('mathScreen').classList.remove('show');
+  if (level >= MAX_LEVEL) {
+    saveBest();
+    showMsg('🏆 YOU WIN! 🏆', 'You beat all 50 levels! You are a Math Champion!', '↻ Play Again', newGame);
+    return;
+  }
+  level++;
+  saveBest();
+  showMsg(`🎉 Level ${level}!`, 'Get ready — the dino runs a little faster now!', '▶ Go!', startLevel);
+}
+
+$('bestText').textContent = best.level > 1 ? `Best: level ${best.level}, score ${best.score}` : '';
+$('startBtn').onclick = () => { $('startScreen').classList.remove('show'); newGame(); };
+running = false; frame = 0;
+clouds = null; obstacles = []; distance = 0;
+dino.y = GROUND - dino.h;
+clouds = [{ x: 200, y: 50 }, { x: 550, y: 80 }];
+loop();
+</script>
+</body>
+</html>
