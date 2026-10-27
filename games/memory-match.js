@@ -33,8 +33,8 @@ export default {
       const card = cards[Number(button.dataset.index)];
       if (lockBoard || button === firstCard || button.disabled) return;
 
-      button.textContent = card.symbol;
-      button.setAttribute("aria-label", `Card ${Number(button.dataset.index) + 1}: ${card.symbol}`);
+      button.textContent = card;
+      button.setAttribute("aria-label", `Card ${Number(button.dataset.index) + 1}: ${card}`);
 
       if (!firstCard) {
         firstCard = button;
@@ -42,7 +42,7 @@ export default {
       }
 
       const firstCardData = cards[Number(firstCard.dataset.index)];
-      if (firstCardData.symbol === card.symbol) {
+      if (firstCardData === card) {
         firstCard.disabled = true;
         button.disabled = true;
         firstCard = undefined;
