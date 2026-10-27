@@ -1,0 +1,43 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="theme-color" content="#f5f8ff">
+    <title>Playroom — Little games, big fun</title>
+    <link rel="stylesheet" href="styles.css">
+    <script type="module" src="src/app.js"></script>
+  </head>
+  <body>
+    <main class="page-shell">
+      <header class="site-header">
+        <a class="brand" href="./" aria-label="Playroom home">
+          <span class="brand-mark" aria-hidden="true">✦</span>
+          <span>playroom</span>
+        </a>
+        <p class="header-note">A happy little place to play</p>
+      </header>
+
+      <section id="game-list" aria-labelledby="page-title">
+        <div class="intro">
+          <p class="eyebrow">PICK A GAME</p>
+          <h1 id="page-title">Little games,<br>big fun.</h1>
+          <p class="intro-copy">Choose something to play. There’s always time for one more round!</p>
+        </div>
+        <div id="games" class="game-grid" aria-live="polite"></div>
+      </section>
+
+      <section id="game-screen" class="game-screen" aria-labelledby="game-title" hidden>
+        <button id="back-button" class="back-button" type="button">← All games</button>
+        <div class="game-heading">
+          <p class="eyebrow">NOW PLAYING</p>
+          <h1 id="game-title"></h1>
+          <p id="game-description" class="intro-copy"></p>
+        </div>
+        <div id="game-container" class="game-container"></div>
+      </section>
+
+      <footer class="site-footer">Made for curious minds <span aria-hidden="true">♥</span></footer>
+    </main>
+  </body>
+</html>
