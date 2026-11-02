@@ -1,0 +1,146 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no">
+<title>Block Builder Balance</title>
+<style>
+  * { box-sizing: border-box; }
+  body { margin: 0; background: #e6fcf5; color: #333; font-family: "Comic Sans MS", "Trebuchet MS", sans-serif;
+    display: flex; flex-direction: column; align-items: center; min-height: 100vh; user-select: none; -webkit-user-select: none; padding: 0 12px 20px; }
+  h1 { margin: 12px 0 4px; font-size: 28px; }
+  #hud { width: 100%; max-width: 700px; display: flex; justify-content: space-between; font-size: 20px; font-weight: bold; }
+  #eq { font-size: 40px; font-weight: bold; margin: 10px 0 0; min-height: 56px; text-align: center; }
+  #tip { font-size: 19px; text-align: center; min-height: 28px; max-width: 700px; }
+  #scale { position: relative; width: min(640px, 94vw); height: 270px; margin-top: 10px; }
+  #post { position: absolute; left: 50%; bottom: 0; width: 20px; height: 150px; margin-left: -10px; background: #8d6e63; border-radius: 6px; }
+  #base { position: absolute; left: 50%; bottom: 0; width: 140px; height: 18px; margin-left: -70px; background: #6d4c41; border-radius: 8px; }
+  #beam { position: absolute; left: 4%; right: 4%; bottom: 150px; height: 14px; background: #a1887f; border-radius: 7px; transition: transform 0.6s; transform-origin: 50% 50%; }
+  .pan { position: absolute; bottom: 14px; width: 42%; min-height: 40px; display: flex; flex-wrap: wrap-reverse; justify-content: center; align-content: flex-start; gap: 3px;
+    border-bottom: 8px solid #455a64; padding: 2px; transition: transform 0.6s; transform-origin: 50% 100%; }
+  .pan.l { left: 0; } .pan.r { right: 0; }
+  .blk { min-width: 30px; height: 30px; padding: 0 5px; border: 2px solid #333; border-radius: 6px; font-weight: bold; font-size: 17px; display: flex; align-items: center; justify-content: center; cursor: pointer; }
+  .b1 { background: #ffe066; } .b2 { background: #ffa94d; } .b5 { background: #74c0fc; } .b10 { background: #b197fc; }
+  .mystery { background: #343a40; color: #fff; font-size: 20px; min-width: 40px; height: 40px; }
+  .row { display: flex; flex-wrap: wrap; gap: 8px; justify-content: center; margin: 8px 0; }
+  button { font-family: inherit; font-size: 24px; font-weight: bold; padding: 8px 14px; border: 3px solid #333; border-radius: 14px; background: #ffe066; cursor: pointer; min-width: 60px; }
+  button:active { transform: scale(0.95); }
+  button.go { background: #8ce99a; } button.red { background: #ff8787; }
+  #overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.45); display: none; align-items: center; justify-content: center; padding: 12px; z-index: 5; }
+  #overlay.show { display: flex; }
+  #box { background: #fff; border: 4px solid #333; border-radius: 18px; padding: 18px; text-align: center; max-width: 480px; }
+  .levels { display: grid; grid-template-columns: repeat(5, 1fr); gap: 6px; margin: 10px 0; }
+  .levels button { font-size: 18px; min-width: 0; padding: 6px 0; }
+  a.home { color: #1971c2; font-size: 16px; margin-top: 12px; }
+</style>
+</head>
+<body>
+<h1>🧱 Block Builder Balance</h1>
+<div id="hud"><span id="lvl"></span><span id="prog"></span><button id="menuBtn" style="font-size:18px">☰ Levels</button></div>
+<div id="eq"></div>
+<div id="tip"></div>
+<div id="scale"><div id="base"></div><div id="post"></div>
+  <div id="beam"><div class="pan l" id="left"></div><div class="pan r" id="right"></div></div></div>
+<div class="row" id="controls"></div>
+<a class="home" href="../">← All games</a>
+<div id="overlay"><div id="box"></div></div>
+
+<script>
+var $ = function (i) { return document.getElementById(i); };
+function rnd(a, b) { return a + Math.floor(Math.random() * (b - a + 1)); }
+// 30 levels in 6 stages. Each puzzle: left/right are lists of terms: numbers or "?" (mystery), mul = multiplier for "?"
+var STAGES = [
+  { name: "Balance it", tip: "Tap blocks to put them on the right side until the scale is level.", make: function () { var a = rnd(1, 5), b = rnd(1, 5); return { left: [a, b], build: true }; } },
+  { name: "Bigger balance", tip: "Make the right side weigh the same as the left.", make: function () { var a = rnd(4, 10), b = rnd(3, 10); return { left: [a, b], build: true }; } },
+  { name: "Mystery box", tip: "What number is hiding in the box? Pick it to balance the scale.", make: function () { var x = rnd(1, 9), b = rnd(1, 9); return { left: ["?", b], right: [x + b], x: x }; } },
+  { name: "Both sides", tip: "Both sides must weigh the same.", make: function () { var x = rnd(1, 9), b = rnd(1, 8), c = rnd(1, 9); var d = x + b - c; if (d <= 0) { c = rnd(1, x + b - 1); d = x + b - c; } return { left: ["?", b], right: [c, d], x: x }; } },
+  { name: "Take away", tip: "The box lost some blocks. What was in it at first?", make: function () { var x = rnd(5, 15), b = rnd(1, x - 1); return { left: ["?", -b], right: [x - b], x: x }; } },
+  { name: "Many boxes", tip: "Every box holds the SAME number.", make: function () { var m = rnd(2, 4), x = rnd(1, 6); return { left: ["?"], mul: m, right: [m * x], x: x }; } }
+];
+var PER = 5, best = {};
+try { best = JSON.parse(localStorage.getItem("balanceDone")) || {}; } catch (e) {}
+var level, stage, puz, rightBlocks, tries;
+
+function sum(list, x) { return list.reduce(function (s, t) { return s + (t === "?" ? (x || 0) * (puz.mul || 1) : t); }, 0); }
+function termText(list, mystery) {
+  return list.map(function (t, i) {
+    var s = t === "?" ? (puz.mul ? puz.mul + " × □" : (mystery === undefined ? "□" : mystery)) : t < 0 ? "− " + -t : (i ? "+ " : "") + t;
+    return s;
+  }).join(" ");
+}
+function blocksFor(n) { var out = []; [10, 5, 2, 1].forEach(function (v) { while (n >= v) { out.push(v); n -= v; } }); return out; }
+function blockEl(v, onclick) { var d = document.createElement("div"); d.className = "blk b" + v; d.textContent = v; if (onclick) d.onclick = onclick; return d; }
+
+function load(l) {
+  level = l; stage = Math.floor(l / PER); tries = 0;
+  puz = STAGES[stage].make(); rightBlocks = [];
+  $("lvl").textContent = "Level " + (l + 1) + " / " + STAGES.length * PER;
+  $("prog").textContent = STAGES[stage].name;
+  $("tip").textContent = STAGES[stage].tip;
+  var c = $("controls"); c.innerHTML = "";
+  if (puz.build) {
+    [1, 2, 5, 10].forEach(function (v) { var b = document.createElement("button"); b.className = "b" + v; b.textContent = "+" + v; b.onclick = function () { rightBlocks.push(v); draw(); check(false); }; c.appendChild(b); });
+    var u = document.createElement("button"); u.className = "red"; u.textContent = "↩"; u.onclick = function () { rightBlocks.pop(); draw(); }; c.appendChild(u);
+  } else {
+    var opts = [puz.x]; while (opts.length < 5) { var o = puz.x + rnd(-4, 4); if (o > 0 && opts.indexOf(o) < 0) opts.push(o); }
+    opts.sort(function (a, b) { return a - b; }).forEach(function (v) { var b = document.createElement("button"); b.textContent = v; b.onclick = function () { tryX(v, b); }; c.appendChild(b); });
+  }
+  draw();
+}
+
+function draw(xShown) {
+  var L = $("left"), R = $("right"); L.innerHTML = ""; R.innerHTML = "";
+  puz.left.forEach(function (t) {
+    if (t === "?") { for (var k = 0; k < (puz.mul || 1); k++) { var m = document.createElement("div"); m.className = "blk mystery"; m.textContent = xShown === undefined ? "?" : xShown; L.appendChild(m); } }
+    else if (t < 0) { var d = document.createElement("div"); d.className = "blk"; d.style.background = "#ff8787"; d.textContent = "−" + -t; L.appendChild(d); }
+    else blocksFor(t).forEach(function (v) { L.appendChild(blockEl(v)); });
+  });
+  if (puz.build) {
+    rightBlocks.forEach(function (v, i) { R.appendChild(blockEl(v, function () { rightBlocks.splice(i, 1); draw(); })); });
+    $("eq").textContent = termText(puz.left) + " = " + (rightBlocks.length ? rightBlocks.join(" + ") : "?");
+  } else {
+    puz.right.forEach(function (t) { blocksFor(t).forEach(function (v) { R.appendChild(blockEl(v)); }); });
+    $("eq").textContent = termText(puz.left, xShown) + " = " + termText(puz.right);
+  }
+  var lw = puz.build ? sum(puz.left) : (xShown === undefined ? null : sum(puz.left, xShown));
+  var rw = puz.build ? rightBlocks.reduce(function (s, v) { return s + v; }, 0) : sum(puz.right);
+  var ang = lw === null ? 0 : Math.max(-14, Math.min(14, (rw - lw) * 2));
+  $("beam").style.transform = "rotate(" + ang + "deg)";
+  $("left").style.transform = $("right").style.transform = "rotate(" + -ang + "deg)";
+}
+
+function check() {
+  var lw = sum(puz.left), rw = rightBlocks.reduce(function (s, v) { return s + v; }, 0);
+  if (rw === lw) setTimeout(win, 700);
+  else if (rw > lw) $("tip").textContent = "Too heavy! Tap a block on the right to take it off.";
+  else $("tip").textContent = STAGES[stage].tip;
+}
+function tryX(v, btn) {
+  tries++; draw(v);
+  if (v === puz.x) { btn.style.background = "#8ce99a"; setTimeout(win, 800); }
+  else { btn.style.background = "#ff8787"; btn.disabled = true; $("tip").textContent = (sum(puz.left, v) > sum(puz.right) ? "Too heavy" : "Too light") + " — the box isn't " + v + ". Try again!"; setTimeout(function () { draw(); }, 900); }
+}
+function win() {
+  best[level] = 1; try { localStorage.setItem("balanceDone", JSON.stringify(best)); } catch (e) {}
+  var last = level === STAGES.length * PER - 1;
+  var ans = puz.build ? "" : "<p style='font-size:26px'>□ = <b>" + puz.x + "</b></p>";
+  show("<h2>⚖️ Balanced!</h2>" + ans + "<p>" + (last ? "🏆 You finished all the levels!" : "Both sides are equal. That's what = means!") + "</p>" +
+    (last ? "<button onclick='menu()'>☰ Levels</button>" : "<button class='go' onclick='hide();load(" + (level + 1) + ")'>Next ▶</button>"));
+}
+function menu() {
+  var h = "<h2>Choose a level</h2>";
+  STAGES.forEach(function (s, si) {
+    h += "<p style='margin:8px 0 0;text-align:left'><b>" + s.name + "</b></p><div class='levels'>";
+    for (var k = 0; k < PER; k++) { var i = si * PER + k, ok = i === 0 || best[i - 1] || best[i]; h += "<button " + (ok ? "onclick='hide();load(" + i + ")'" : "disabled") + ">" + (best[i] ? "✅" : ok ? i + 1 : "🔒") + "</button>"; }
+    h += "</div>";
+  });
+  show(h + "<button class='red' onclick='hide()'>Close</button>");
+}
+function show(h) { $("box").innerHTML = h; $("overlay").classList.add("show"); }
+function hide() { $("overlay").classList.remove("show"); }
+$("menuBtn").onclick = menu;
+var start = 0; while (best[start] && start < STAGES.length * PER - 1) start++;
+load(start);
+</script>
+</body>
+</html>
