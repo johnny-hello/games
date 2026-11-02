@@ -1,0 +1,352 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no">
+<title>Robot Path Coder</title>
+<style>
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: #eef6ff; color: #333;
+    font-family: "Comic Sans MS", "Trebuchet MS", sans-serif;
+    display: flex; flex-direction: column; align-items: center;
+    min-height: 100vh; user-select: none; -webkit-user-select: none; padding: 0 10px 20px;
+  }
+  h1 { margin: 12px 0 4px; font-size: 28px; }
+  #hud { width: 100%; max-width: 640px; display: flex; justify-content: space-between; align-items: center; font-size: 20px; font-weight: bold; padding: 4px 0; }
+  #msg { min-height: 30px; font-size: 20px; text-align: center; max-width: 640px; }
+  #board { display: grid; gap: 4px; background: #333; padding: 4px; border-radius: 12px; margin: 6px 0; }
+  .cell { width: var(--cs); height: var(--cs); border-radius: 6px; background: #c3f0c8;
+    display: flex; align-items: center; justify-content: center; font-size: calc(var(--cs) * 0.65); position: relative; }
+  .cell.rock { background: #ced4da; } .cell.water { background: #74c0fc; }
+  #robot { position: absolute; transition: transform 0.3s; pointer-events: none; display: flex; align-items: center; justify-content: center; }
+  #boardWrap { position: relative; }
+  .shake { animation: shake 0.4s; }
+  @keyframes shake { 25%{translate:-6px} 75%{translate:6px} }
+  .panel { width: 100%; max-width: 640px; background: #fff; border: 3px solid #333; border-radius: 14px; padding: 8px; margin: 6px 0; }
+  .panel h3 { margin: 0 0 6px; font-size: 18px; }
+  #palette, #controls { display: flex; flex-wrap: wrap; gap: 8px; justify-content: center; }
+  #program { display: flex; flex-wrap: wrap; gap: 6px; min-height: 60px; align-items: center; }
+  button { font-family: inherit; font-size: 26px; font-weight: bold; min-width: 60px; padding: 8px 12px;
+    border: 3px solid #333; border-radius: 12px; background: #ffe066; cursor: pointer; }
+  button:active { transform: scale(0.95); }
+  button:disabled { opacity: 0.4; }
+  button.go { background: #8ce99a; } button.blue { background: #74c0fc; font-size: 22px; } button.red { background: #ff8787; font-size: 22px; }
+  .blk { font-size: 26px; padding: 4px 8px; background: #ffe066; border: 2px solid #333; border-radius: 10px; cursor: pointer; }
+  .blk.on { background: #ff922b; transform: scale(1.15); }
+  .loop { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; padding: 4px; border: 3px dashed #845ef7; border-radius: 12px; background: #f3f0ff; }
+  .loop.open { border-style: solid; box-shadow: 0 0 0 3px #d0bfff; }
+  .loop > .head { font-size: 20px; background: #b197fc; border: 2px solid #333; border-radius: 10px; padding: 4px 8px; cursor: pointer; }
+  .loop > .head.on { background: #ff922b; }
+  .hint { color: #888; font-size: 16px; }
+  #overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.45); display: none; align-items: center; justify-content: center; z-index: 9; padding: 12px; }
+  #overlay.show { display: flex; }
+  #box { background: #fff; border: 4px solid #333; border-radius: 18px; padding: 18px; text-align: center; max-width: 520px; width: 100%; max-height: 90vh; overflow: auto; }
+  #box h2 { margin: 4px 0 10px; font-size: 28px; }
+  #box p { font-size: 19px; }
+  .levels { display: grid; grid-template-columns: repeat(5, 1fr); gap: 8px; margin: 10px 0; }
+  .levels button { font-size: 20px; padding: 6px 2px; min-width: 0; }
+  .levels button small { display: block; font-size: 12px; }
+  a.home { font-size: 16px; color: #1971c2; }
+</style>
+</head>
+<body>
+<h1>🤖 Robot Path Coder</h1>
+<div id="hud"><span id="lvl">Level 1</span><span id="gemsLeft">💎 0</span><button class="blue" id="menuBtn">☰ Levels</button></div>
+<div id="msg"></div>
+<div id="boardWrap"><div id="board"></div><div id="robot">🤖</div></div>
+
+<div class="panel">
+  <h3>Your program <span class="hint" id="count"></span></h3>
+  <div id="program"></div>
+</div>
+<div class="panel">
+  <div id="palette"></div>
+  <div id="controls" style="margin-top:8px">
+    <button class="go" id="goBtn">▶ Go!</button>
+    <button class="blue" id="undoBtn">↩ Undo</button>
+    <button class="red" id="clearBtn">🗑 Clear</button>
+  </div>
+</div>
+<a class="home" href="../">← All games</a>
+
+<div id="overlay"><div id="box"></div></div>
+
+<script id="core">
+// Map legend: R robot start, G gem, # rock, ~ water, . grass
+// limit = most blocks allowed (null = no limit). sol = a known answer (used by tests).
+var LEVELS = [
+  { tip: "Tap ➡️ to add a step, then press ▶ Go! Grab the gem 💎.", map: ["R..G"], sol: "RRR" },
+  { tip: "Robots can go down too ⬇️.", map: ["R...", "....", "...G"], sol: "RRRDD" },
+  { tip: "Rocks 🪨 block the way. Go around!", map: ["R.#.", "..#.", "...G"], sol: "DDRRR" },
+  { tip: "Now go up ⬆️ and left ⬅️.", map: ["G..", "...", "..R"], sol: "UULL" },
+  { tip: "Collect ALL the gems!", map: ["R.G.", "....", "G..G"], sol: "RRDDLLRRR" },
+  { tip: "Robots can't swim 🌊. Stay out of the water!", map: ["R~~G", "....", ".~~."], sol: "DRRRU" },
+  { tip: "A tricky maze. Plan before you go!", map: ["R#...", ".#.#.", "...#G"], sol: "DDRRUURRDD" },
+  { tip: "Two gems, rocks and water.", map: ["R.~.G", "#.~..", "G...."], sol: "RDDLRRRRUU" },
+  { tip: "NEW: 🔁 Loops! Tap 🔁, then ➡️, and the loop does it many times. Only 2 blocks allowed!", map: ["R.......G"], limit: 2, sol: "8(R)" },
+  { tip: "Use two loops. Tap 🔚 to finish a loop before starting the next one.", map: ["R.....", "......", "......", "......", "......", ".....G"], limit: 4, sol: "5(R)5(D)" },
+  { tip: "Stairs! Put ➡️ and ⬇️ inside ONE loop.", map: ["RG###", "#GG##", "##GG#", "###GG", "####G"], limit: 3, sol: "4(RD)" },
+  { tip: "Walk around the rocks to grab every corner gem.", map: ["R...G", ".###.", ".###.", ".###.", "G...G"], limit: 6, sol: "4(R)4(D)4(L)" },
+  { tip: "Find the pattern that repeats.", map: ["R.G~~~~", "~~..G~~", "~~~~..G", "~~~~~~G"], limit: 4, sol: "3(RRD)" },
+  { tip: "A loop INSIDE a loop! Snake back and forth.", map: ["R...G", "G....", "....G", "G....", "G...G"], limit: 7, sol: "2(4(R)D4(L)D)4(R)" },
+  { tip: "Big stairs. Loops inside loops again!", map: ["R..G~~~", "~~~.~~~", "~~~.~~~", "~~~G...", "~~~~~~.", "~~~~~~.", "~~~~~~G"], limit: 5, sol: "2(3(R)3(D))" }
+];
+// level 14 needs room for the last row: 2(4R D 4L D) then 4R
+LEVELS[13].limit = 9;
+
+var DIRS = { U: [-1, 0], D: [1, 0], L: [0, -1], R: [0, 1] };
+
+function parseLevel(lv) {
+  var start, gems = [];
+  lv.map.forEach(function (row, r) {
+    row.split("").forEach(function (ch, c) {
+      if (ch === "R") start = [r, c];
+      if (ch === "G") gems.push(r + "," + c);
+    });
+  });
+  return { start: start, gems: gems, rows: lv.map.length, cols: lv.map[0].length };
+}
+
+// program: array of "U"/"D"/"L"/"R" or {n: count, body: [...]}
+function countBlocks(prog) {
+  return prog.reduce(function (s, b) { return s + (typeof b === "string" ? 1 : 1 + countBlocks(b.body)); }, 0);
+}
+
+// flatten into a list of {dir, path} steps (path = index path to highlight)
+function flatten(prog, path, out) {
+  out = out || []; path = path || [];
+  prog.forEach(function (b, i) {
+    if (typeof b === "string") out.push({ dir: b, path: path.concat(i) });
+    else for (var k = 0; k < b.n; k++) flatten(b.body, path.concat(i), out);
+  });
+  return out;
+}
+
+// returns {steps:[{pos, path, result}], outcome:'win'|'rock'|'wall'|'water'|'gems'|'empty'}
+function simulate(lv, prog) {
+  var info = parseLevel(lv), pos = info.start.slice(), left = info.gems.slice(), steps = [];
+  var flat = flatten(prog);
+  if (!flat.length) return { steps: steps, outcome: "empty" };
+  for (var i = 0; i < flat.length; i++) {
+    var d = DIRS[flat[i].dir], r = pos[0] + d[0], c = pos[1] + d[1];
+    if (r < 0 || c < 0 || r >= info.rows || c >= info.cols) { steps.push({ pos: pos, path: flat[i].path, bump: true }); return { steps: steps, outcome: "wall" }; }
+    var ch = lv.map[r][c];
+    if (ch === "#") { steps.push({ pos: pos, path: flat[i].path, bump: true }); return { steps: steps, outcome: "rock" }; }
+    pos = [r, c];
+    if (ch === "~") { steps.push({ pos: pos, path: flat[i].path }); return { steps: steps, outcome: "water" }; }
+    var key = r + "," + c, gi = left.indexOf(key), got = gi >= 0;
+    if (got) left.splice(gi, 1);
+    steps.push({ pos: pos, path: flat[i].path, gem: got ? key : null });
+    if (!left.length) return { steps: steps, outcome: "win" };
+  }
+  return { steps: steps, outcome: "gems" };
+}
+
+// "2(4(R)D)" -> program
+function parseSol(s) {
+  var i = 0;
+  function seq() {
+    var out = [];
+    while (i < s.length && s[i] !== ")") {
+      if (/\d/.test(s[i])) { var n = +s[i++]; i++; var body = seq(); i++; out.push({ n: n, body: body }); }
+      else out.push(s[i++]);
+    }
+    return out;
+  }
+  return seq();
+}
+if (typeof module !== "undefined") module.exports = { LEVELS: LEVELS, simulate: simulate, parseSol: parseSol, countBlocks: countBlocks };
+</script>
+
+<script>
+var SAVE = "robotCoderStars";
+var stars = [];
+try { stars = JSON.parse(localStorage.getItem(SAVE)) || []; } catch (e) {}
+function save() { try { localStorage.setItem(SAVE, JSON.stringify(stars)); } catch (e) {} }
+
+var cur = 0, prog = [], openPath = null, tries = 0, running = false;
+var $ = function (id) { return document.getElementById(id); };
+var ARROW = { U: "⬆️", D: "⬇️", L: "⬅️", R: "➡️" };
+var cellSize = 56;
+
+function unlocked(i) { return i === 0 || (stars[i - 1] || 0) > 0; }
+
+function loadLevel(i) {
+  cur = i; prog = []; openPath = null; tries = 0;
+  var lv = LEVELS[i], info = parseLevel(lv);
+  cellSize = Math.max(34, Math.min(64, Math.floor((Math.min(window.innerWidth, 640) - 40) / info.cols) - 4));
+  var b = $("board");
+  b.style.setProperty("--cs", cellSize + "px");
+  b.style.gridTemplateColumns = "repeat(" + info.cols + ", " + cellSize + "px)";
+  b.innerHTML = "";
+  lv.map.forEach(function (row, r) {
+    row.split("").forEach(function (ch, c) {
+      var d = document.createElement("div");
+      d.className = "cell" + (ch === "#" ? " rock" : ch === "~" ? " water" : "");
+      d.id = "c" + r + "_" + c;
+      d.textContent = ch === "#" ? "🪨" : ch === "G" ? "💎" : ch === "~" ? "🌊" : "";
+      b.appendChild(d);
+    });
+  });
+  var rb = $("robot");
+  rb.style.width = rb.style.height = cellSize + "px";
+  rb.style.fontSize = (cellSize * 0.7) + "px";
+  placeRobot(info.start, true);
+  $("lvl").textContent = "Level " + (i + 1) + " / " + LEVELS.length;
+  $("gemsLeft").textContent = "💎 " + info.gems.length;
+  say(lv.tip);
+  buildPalette();
+  render();
+}
+
+function placeRobot(pos, instant) {
+  var rb = $("robot");
+  if (instant) { rb.style.transition = "none"; requestAnimationFrame(function () { rb.style.transition = ""; }); }
+  rb.style.transform = "translate(" + (4 + pos[1] * (cellSize + 4)) + "px," + (4 + pos[0] * (cellSize + 4)) + "px)";
+  rb.style.left = rb.style.top = "0";
+}
+
+function say(t) { $("msg").textContent = t; }
+
+function buildPalette() {
+  var p = $("palette"); p.innerHTML = "";
+  ["U", "D", "L", "R"].forEach(function (d) {
+    var b = document.createElement("button"); b.textContent = ARROW[d];
+    b.onclick = function () { add(d); }; p.appendChild(b);
+  });
+  if (cur >= 8) {
+    var l = document.createElement("button"); l.textContent = "🔁"; l.style.background = "#b197fc";
+    l.onclick = function () { add({ n: 2, body: [] }); }; p.appendChild(l);
+    var e = document.createElement("button"); e.textContent = "🔚"; e.id = "endBtn"; e.style.background = "#d0bfff";
+    e.onclick = function () { if (openPath) { openPath = openPath.length > 1 ? openPath.slice(0, -1) : null; render(); } };
+    p.appendChild(e);
+  }
+}
+
+function listAt(path) { var l = prog; (path || []).forEach(function (i) { l = l[i].body; }); return l; }
+
+function add(b) {
+  if (running) return;
+  var lim = LEVELS[cur].limit;
+  if (lim && countBlocks(prog) >= lim) { say("Only " + lim + " blocks allowed here. Try a 🔁 loop!"); shake(); return; }
+  var l = listAt(openPath); l.push(b);
+  if (typeof b !== "string") openPath = (openPath || []).concat(l.length - 1);
+  render();
+}
+
+function render(active) {
+  var el = $("program"); el.innerHTML = "";
+  function draw(list, parent, path) {
+    list.forEach(function (b, i) {
+      var p = path.concat(i), isActive = active && active.join() === p.join();
+      if (typeof b === "string") {
+        var s = document.createElement("span"); s.className = "blk" + (isActive ? " on" : ""); s.textContent = ARROW[b];
+        s.title = "Tap to remove"; s.onclick = function () { remove(p); }; parent.appendChild(s);
+      } else {
+        var box = document.createElement("span");
+        box.className = "loop" + (openPath && openPath.join() === p.join() ? " open" : "");
+        var h = document.createElement("span"); h.className = "head" + (active && active.join().indexOf(p.join()) === 0 ? " on" : "");
+        h.textContent = "🔁 ×" + b.n;
+        h.title = "Tap to change the number";
+        h.onclick = function () { if (running) return; b.n = b.n >= 9 ? 2 : b.n + 1; render(); };
+        box.appendChild(h);
+        draw(b.body, box, p);
+        if (!b.body.length) { var hn = document.createElement("span"); hn.className = "hint"; hn.textContent = "add steps…"; box.appendChild(hn); }
+        var x = document.createElement("span"); x.className = "blk"; x.textContent = "✖"; x.style.fontSize = "16px";
+        x.onclick = function () { remove(p); }; box.appendChild(x);
+        box.ondblclick = null;
+        box.addEventListener("click", function (ev) { if (ev.target === box && !running) { openPath = p; render(); } });
+        parent.appendChild(box);
+      }
+    });
+  }
+  draw(prog, el, []);
+  if (!prog.length) el.innerHTML = '<span class="hint">Tap the arrows below to build your program</span>';
+  var lim = LEVELS[cur].limit, n = countBlocks(prog);
+  $("count").textContent = "(" + n + (lim ? " / " + lim : "") + " blocks)";
+  var eb = $("endBtn"); if (eb) eb.disabled = !openPath;
+}
+
+function remove(path) {
+  if (running) return;
+  var parent = listAt(path.slice(0, -1)); parent.splice(path[path.length - 1], 1);
+  if (openPath && openPath.join().indexOf(path.join()) === 0) openPath = path.length > 1 ? path.slice(0, -1) : null;
+  render();
+}
+
+function undo() {
+  if (running) return;
+  // remove the last block of the open loop, or the last top-level block
+  var l = listAt(openPath);
+  if (l.length) { l.pop(); }
+  else if (openPath) { var p = openPath; openPath = p.length > 1 ? p.slice(0, -1) : null; listAt(openPath).splice(p[p.length - 1], 1); }
+  render();
+}
+
+function shake() { var b = $("board"); b.classList.remove("shake"); void b.offsetWidth; b.classList.add("shake"); }
+
+function go() {
+  if (running) return;
+  var lv = LEVELS[cur], res = simulate(lv, prog), info = parseLevel(lv);
+  if (res.outcome === "empty") { say("Add some arrows first!"); return; }
+  running = true; tries++;
+  loadBoardGems(); placeRobot(info.start, true);
+  var left = info.gems.length, i = 0;
+  $("gemsLeft").textContent = "💎 " + left;
+  function step() {
+    if (i >= res.steps.length) return finish(res.outcome);
+    var s = res.steps[i++];
+    render(s.path);
+    if (s.bump) { shake(); return setTimeout(function () { finish(res.outcome); }, 400); }
+    placeRobot(s.pos);
+    if (s.gem) setTimeout(function () { var c = $("c" + s.gem.replace(",", "_")); c.textContent = "✨"; left--; $("gemsLeft").textContent = "💎 " + left; }, 250);
+    setTimeout(step, 380);
+  }
+  step();
+}
+
+function loadBoardGems() {
+  LEVELS[cur].map.forEach(function (row, r) { row.split("").forEach(function (ch, c) { if (ch === "G") $("c" + r + "_" + c).textContent = "💎"; }); });
+}
+
+function finish(outcome) {
+  running = false; render();
+  var msgs = {
+    rock: "🪨 Bonk! The robot hit a rock. Fix your program and try again.",
+    wall: "🧱 Oops! The robot tried to leave the board.",
+    water: "🌊 Splash! Robots can't swim.",
+    gems: "💎 The program ended, but some gems are still left."
+  };
+  if (outcome !== "win") { say(msgs[outcome]); if (outcome === "water") $("robot").textContent = "💦"; setTimeout(function () { $("robot").textContent = "🤖"; placeRobot(parseLevel(LEVELS[cur]).start, true); loadBoardGems(); $("gemsLeft").textContent = "💎 " + parseLevel(LEVELS[cur]).gems.length; }, 1200); return; }
+  var st = tries === 1 ? 3 : tries === 2 ? 2 : 1;
+  stars[cur] = Math.max(stars[cur] || 0, st); save();
+  var last = cur === LEVELS.length - 1;
+  showBox("<h2>" + (last ? "🏆 You finished every level!" : "🎉 Level complete!") + "</h2><p style='font-size:40px;margin:6px'>" + "⭐".repeat(st) + "☆".repeat(3 - st) + "</p>" +
+    "<p>" + (st === 3 ? "Perfect on the first try!" : "Tip: solve it on the first try for 3 stars.") + "</p>" +
+    "<button class='blue' onclick='hideBox();loadLevel(" + cur + ")'>🔄 Again</button> " +
+    (last ? "<button class='go' onclick='levelMenu()'>☰ Levels</button>" : "<button class='go' onclick='hideBox();loadLevel(" + (cur + 1) + ")'>Next ▶</button>"));
+}
+
+function showBox(html) { $("box").innerHTML = html; $("overlay").classList.add("show"); }
+function hideBox() { $("overlay").classList.remove("show"); }
+
+function levelMenu() {
+  var h = "<h2>Choose a level</h2><div class='levels'>";
+  LEVELS.forEach(function (_, i) {
+    var ok = unlocked(i), s = stars[i] || 0;
+    h += "<button " + (ok ? "onclick='hideBox();loadLevel(" + i + ")'" : "disabled") + ">" + (ok ? i + 1 : "🔒") + "<small>" + (s ? "⭐".repeat(s) : "&nbsp;") + "</small></button>";
+  });
+  h += "</div><p class='hint'>Levels 9+ use 🔁 loops.</p><button class='red' onclick='hideBox()'>Close</button>";
+  showBox(h);
+}
+
+$("goBtn").onclick = go;
+$("undoBtn").onclick = undo;
+$("clearBtn").onclick = function () { if (!running) { prog = []; openPath = null; render(); } };
+$("menuBtn").onclick = levelMenu;
+var first = 0; while (first < LEVELS.length - 1 && (stars[first] || 0) > 0) first++;
+loadLevel(first);
+</script>
+</body>
+</html>

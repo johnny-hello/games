@@ -20,3 +20,11 @@ A Chrome-dino-style runner. Finish a level, then solve 3 math problems (5 choice
 | 36–40 | Times tables to 10 |
 | 41–45 | Division |
 | 46–50 | Mixed challenge |
+
+## 🤖 Robot Path Coder (`robot-code/`)
+A first coding game. Build a program from arrow blocks to move the robot and collect every gem 💎.
+- 15 levels. Rocks 🪨 block the robot, and water 🌊 means a splash.
+- Levels 1–8: arrow steps only (planning and sequencing).
+- Levels 9–15: 🔁 loops with a block limit, ending with loops inside loops.
+- Tap a block to remove it. Tap a loop's 🔁 ×N to change the count, and use 🔚 to close a loop.
+- Stars: ⭐⭐⭐ for solving on the first try. Progress is saved in the browser.
