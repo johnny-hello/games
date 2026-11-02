@@ -1,0 +1,134 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no">
+<title>Frog Hop Patterns</title>
+<style>
+  * { box-sizing: border-box; }
+  body { margin: 0; background: #1c7ed6; color: #fff; font-family: "Comic Sans MS", "Trebuchet MS", sans-serif;
+    display: flex; flex-direction: column; align-items: center; min-height: 100vh; user-select: none; -webkit-user-select: none; padding: 0 12px 20px;
+    background-image: repeating-linear-gradient(170deg, #1c7ed6 0 40px, #228be6 40px 80px); }
+  h1 { margin: 12px 0 4px; font-size: 28px; text-shadow: 2px 2px #0b4f8a; }
+  #hud { width: 100%; max-width: 720px; display: flex; justify-content: space-between; font-size: 20px; font-weight: bold; }
+  #rule { font-size: 20px; min-height: 30px; margin: 6px 0; text-align: center; }
+  #path { display: flex; gap: 8px; align-items: flex-end; justify-content: center; min-height: 130px; margin-top: 10px; flex-wrap: nowrap; }
+  .pad { width: 74px; height: 74px; border-radius: 50%; background: #51cf66; border: 4px solid #2b8a3e; display: flex; align-items: center; justify-content: center;
+    font-size: 26px; font-weight: bold; color: #1b4332; position: relative; flex-shrink: 0; }
+  .pad.q { background: #a9e34b; border-style: dashed; }
+  .frog { position: absolute; top: -46px; font-size: 44px; }
+  #timer { width: 100%; max-width: 720px; height: 16px; background: rgba(255,255,255,0.3); border-radius: 8px; margin: 16px 0 6px; overflow: hidden; }
+  #bar { height: 100%; width: 100%; background: #ffe066; }
+  #choices { display: flex; gap: 16px; justify-content: center; margin-top: 12px; }
+  #choices button { width: 100px; height: 100px; border-radius: 50%; background: #69db7c; border: 5px solid #2b8a3e; font-size: 32px; font-weight: bold; color: #1b4332; font-family: inherit; cursor: pointer; }
+  #choices button:active { transform: scale(0.93); }
+  #choices button.wrong { background: #74c0fc; border-color: #1864ab; }
+  .hop { animation: hop 0.4s; }
+  @keyframes hop { 50% { transform: translateY(-30px) scale(1.2); } }
+  .splash { animation: splash 0.6s; }
+  @keyframes splash { 50% { transform: scale(1.4); opacity: 0.3; } }
+  button.big { font-family: inherit; font-size: 24px; font-weight: bold; padding: 12px 24px; border: 3px solid #333; border-radius: 14px; background: #ffe066; cursor: pointer; margin: 4px; }
+  #overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.5); display: none; align-items: center; justify-content: center; padding: 12px; z-index: 5; }
+  #overlay.show { display: flex; }
+  #box { background: #fff; color: #333; border: 4px solid #333; border-radius: 18px; padding: 18px; text-align: center; max-width: 480px; }
+  a.home { color: #fff; font-size: 16px; margin-top: 16px; }
+  @media (max-width: 520px) { .pad { width: 54px; height: 54px; font-size: 20px; } .frog { font-size: 34px; top: -36px; } #choices button { width: 80px; height: 80px; font-size: 26px; } }
+</style>
+</head>
+<body>
+<h1>🐸 Frog Hop Patterns</h1>
+<div id="hud"><span id="lvl">Level 1</span><span id="lives">❤️❤️❤️</span><span id="score">🪰 0</span></div>
+<div id="rule"></div>
+<div id="path"></div>
+<div id="timer"><div id="bar"></div></div>
+<div id="choices"></div>
+<a class="home" href="../">← All games</a>
+<div id="overlay"><div id="box"></div></div>
+
+<script>
+var $ = function (i) { return document.getElementById(i); };
+function rnd(a, b) { return a + Math.floor(Math.random() * (b - a + 1)); }
+function pick(a) { return a[rnd(0, a.length - 1)]; }
+// level -> pattern maker {start, step, hint}
+var LEVELS = [
+  { hint: "Count by 2s", f: function () { return { start: 2 * rnd(0, 3), step: 2 }; } },
+  { hint: "Count by 5s", f: function () { return { start: 5 * rnd(0, 3), step: 5 }; } },
+  { hint: "Count by 10s", f: function () { return { start: 10 * rnd(0, 4), step: 10 }; } },
+  { hint: "Count by 3s", f: function () { return { start: 3 * rnd(0, 3), step: 3 }; } },
+  { hint: "Count by 4s", f: function () { return { start: 4 * rnd(0, 3), step: 4 }; } },
+  { hint: "Counting backwards!", f: function () { var s = pick([2, 5, 10]); return { start: s * rnd(8, 12), step: -s }; } },
+  { hint: "Count by 6s, 7s, 8s or 9s", f: function () { var s = rnd(6, 9); return { start: s * rnd(0, 3), step: s }; } },
+  { hint: "Tricky starts: find the jump size", f: function () { return { start: rnd(1, 9), step: pick([2, 3, 4, 5, 10]) }; } },
+  { hint: "Anything goes!", f: function () { var s = rnd(2, 12) * pick([1, 1, -1]); return { start: s < 0 ? -s * rnd(8, 12) + rnd(0, 3) : rnd(0, 20), step: s }; } }
+];
+var PER = 6; // correct answers to level up
+var lvl, lives, score, streak, cur, t0, limit, timerId, locked;
+
+function begin(l) {
+  lvl = l || 0; lives = 3; score = 0; streak = 0; hide(); nextLevel(true);
+}
+function nextLevel(first) {
+  if (!first) lvl = Math.min(lvl + 1, LEVELS.length - 1);
+  $("lvl").textContent = "Level " + (lvl + 1);
+  $("rule").textContent = "💡 " + LEVELS[lvl].hint;
+  newRound();
+}
+function newRound() {
+  var p = LEVELS[lvl].f(), shown = 3, seq = [];
+  for (var i = 0; i <= shown; i++) seq.push(p.start + i * p.step);
+  cur = { seq: seq, ans: seq[shown], step: p.step };
+  var path = $("path"); path.innerHTML = "";
+  seq.forEach(function (v, i) {
+    var d = document.createElement("div"); d.className = "pad" + (i === shown ? " q" : "");
+    d.textContent = i === shown ? "?" : v;
+    if (i === shown - 1) { var f = document.createElement("span"); f.className = "frog"; f.id = "frog"; f.textContent = "🐸"; d.appendChild(f); }
+    path.appendChild(d);
+  });
+  var opts = [cur.ans], wrongs = [cur.ans + 1, cur.ans - 1, cur.ans + p.step, cur.ans - Math.sign(p.step), cur.ans + 2 * p.step, seq[shown - 1] + 1].filter(function (x) { return x !== cur.ans && x >= 0; });
+  while (opts.length < 3 && wrongs.length) { var w = wrongs.splice(rnd(0, wrongs.length - 1), 1)[0]; if (opts.indexOf(w) < 0) opts.push(w); }
+  opts.sort(function () { return Math.random() - 0.5; });
+  var c = $("choices"); c.innerHTML = "";
+  opts.forEach(function (v) { var b = document.createElement("button"); b.textContent = v; b.onclick = function () { answer(v, b); }; c.appendChild(b); });
+  limit = Math.max(3500, 10000 - lvl * 700 - streak * 150); t0 = Date.now(); locked = false;
+  clearInterval(timerId); timerId = setInterval(tick, 50);
+}
+function tick() {
+  var left = 1 - (Date.now() - t0) / limit;
+  $("bar").style.width = Math.max(0, left * 100) + "%";
+  if (left <= 0) { clearInterval(timerId); miss(null, "⏰ Too slow! The lily pad sank."); }
+}
+function answer(v, b) {
+  if (locked) return; locked = true; clearInterval(timerId);
+  if (v === cur.ans) {
+    score++; streak++;
+    var q = $("path").lastChild; q.classList.remove("q"); q.textContent = v;
+    var f = $("frog"); f.remove(); q.appendChild(f); f.classList.add("hop");
+    $("score").textContent = "🪰 " + score;
+    setTimeout(function () { if (score % PER === 0) levelUp(); else newRound(); }, 550);
+  } else { b.classList.add("wrong"); miss(b, "💦 Splash! " + cur.seq.slice(0, 3).join(", ") + ", next is " + cur.ans + " (jump " + (cur.step > 0 ? "+" : "−") + Math.abs(cur.step) + ")"); }
+}
+function miss(b, text) {
+  locked = true; streak = 0; lives--;
+  var f = $("frog"); if (f) { f.textContent = "💦"; f.classList.add("splash"); }
+  $("lives").textContent = "❤️".repeat(lives) + "🤍".repeat(3 - lives);
+  $("rule").textContent = text;
+  setTimeout(function () {
+    if (lives <= 0) return over();
+    $("rule").textContent = "💡 " + LEVELS[lvl].hint; newRound();
+  }, 1800);
+}
+function levelUp() {
+  if (lvl === LEVELS.length - 1) { newRound(); return; }
+  show("<h2>🎉 Level " + (lvl + 1) + " done!</h2><p style='font-size:20px'>Next: " + LEVELS[lvl + 1].hint + "</p><button class='big' onclick='hide();nextLevel()'>Hop on ▶</button>");
+}
+function over() {
+  var best = 0; try { best = +localStorage.getItem("frogBest") || 0; if (score > best) localStorage.setItem("frogBest", score); } catch (e) {}
+  show("<h2>🐸 Game over</h2><p style='font-size:22px'>You caught 🪰 " + score + " flies" + (score > best ? " — a new record!" : "") + "</p>" +
+    "<button class='big' onclick='begin(0)'>Play again</button>" + (lvl > 0 ? "<button class='big' onclick='begin(" + lvl + ")'>Retry level " + (lvl + 1) + "</button>" : ""));
+}
+function show(h) { $("box").innerHTML = h; $("overlay").classList.add("show"); }
+function hide() { $("overlay").classList.remove("show"); }
+show("<h2>🐸 Frog Hop Patterns</h2><p style='font-size:19px'>Help the frog hop! Find the number on the next lily pad before it sinks.</p><p>2, 4, 6, <b>?</b></p><button class='big' onclick='begin(0)'>Start</button>");
+</script>
+</body>
+</html>
