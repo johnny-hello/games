@@ -1,0 +1,189 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no">
+<title>Beat Garden</title>
+<style>
+  * { box-sizing: border-box; }
+  body { margin: 0; background: #ebfbee; color: #333; font-family: "Comic Sans MS", "Trebuchet MS", sans-serif;
+    display: flex; flex-direction: column; align-items: center; min-height: 100vh; user-select: none; -webkit-user-select: none; padding: 0 10px 24px; }
+  h1 { margin: 12px 0 4px; font-size: 28px; }
+  #task { width: 100%; max-width: 720px; background: #fff; border: 3px solid #333; border-radius: 14px; padding: 8px 12px; font-size: 19px; text-align: center; min-height: 44px; }
+  #msg { min-height: 28px; font-size: 19px; text-align: center; margin: 4px 0; }
+  #grid { display: grid; grid-template-columns: 44px repeat(8, 1fr); gap: 4px; width: 100%; max-width: 720px; margin-top: 6px; }
+  .lab { display: flex; align-items: center; justify-content: center; font-size: 24px; }
+  .cell { aspect-ratio: 1; max-height: 70px; background: #8d6e63; border-radius: 10px; display: flex; align-items: center; justify-content: center; font-size: clamp(20px, 6vw, 38px); cursor: pointer; border: 3px solid transparent; }
+  .cell.beat4 { margin-right: 6px; }
+  .cell.drum { background: #a1887f; }
+  .cell.now { border-color: #ffe066; }
+  .cell.ghost { box-shadow: inset 0 0 0 4px #ffffffaa; }
+  .cell.pop { animation: pop 0.25s; }
+  @keyframes pop { 50% { transform: scale(1.25); } }
+  .row { display: flex; flex-wrap: wrap; gap: 8px; justify-content: center; margin: 10px 0 0; align-items: center; }
+  button { font-family: inherit; font-size: 20px; font-weight: bold; padding: 8px 14px; border: 3px solid #333; border-radius: 14px; background: #ffe066; cursor: pointer; }
+  button:active { transform: scale(0.95); }
+  button.go { background: #8ce99a; } button.blue { background: #74c0fc; } button.red { background: #ff8787; }
+  input[type=range] { width: 120px; }
+  #overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.45); display: none; align-items: center; justify-content: center; padding: 12px; z-index: 5; }
+  #overlay.show { display: flex; }
+  #box { background: #fff; border: 4px solid #333; border-radius: 18px; padding: 18px; text-align: center; max-width: 500px; max-height: 90vh; overflow: auto; }
+  .ch { display: block; width: 100%; text-align: left; font-size: 18px; margin: 5px 0; }
+  a.home { color: #1971c2; font-size: 16px; margin-top: 14px; }
+</style>
+</head>
+<body>
+<h1>🎵 Beat Garden</h1>
+<div id="task">🌱 Free garden: tap the dirt to plant flowers, then press ▶ Play!</div>
+<div id="msg"></div>
+<div id="grid"></div>
+<div class="row">
+  <button class="go" id="playBtn">▶ Play</button>
+  <button class="red" id="clearBtn">🧹 Clear</button>
+  <span>🐢 <input type="range" id="tempo" min="70" max="180" value="110"> 🐇</span>
+</div>
+<div class="row">
+  <button class="blue" id="listenBtn" style="display:none">👂 Listen</button>
+  <button class="go" id="checkBtn" style="display:none">✅ Check</button>
+  <button class="blue" id="modeBtn">🏆 Challenges</button>
+</div>
+<a class="home" href="../">← All games</a>
+<div id="overlay"><div id="box"></div></div>
+
+<script>
+var $ = function (i) { return document.getElementById(i); };
+// rows: 5 notes (high to low) + 2 drums
+var ROWS = [
+  { icon: "🌻", flower: "🌻", f: 880.0 }, { icon: "🌷", flower: "🌷", f: 784.0 }, { icon: "🌼", flower: "🌼", f: 659.3 },
+  { icon: "🌸", flower: "🌸", f: 587.3 }, { icon: "🌹", flower: "🌹", f: 523.3 },
+  { icon: "🍄", flower: "🍄", drum: "hat" }, { icon: "🪨", flower: "🪵", drum: "kick" }
+];
+var STEPS = 8, NOTES = 5, KICK = 6, HAT = 5;
+var grid = ROWS.map(function () { return new Array(STEPS).fill(false); });
+var ctx, playing = false, step = 0, timer, chal = null, ghost = null;
+try { var saved = JSON.parse(localStorage.getItem("beatGarden")); if (saved && saved.length === ROWS.length) grid = saved; } catch (e) {}
+var done = {}; try { done = JSON.parse(localStorage.getItem("beatDone")) || {}; } catch (e) {}
+
+function audio() { if (!ctx) ctx = new (window.AudioContext || window.webkitAudioContext)(); if (ctx.state === "suspended") ctx.resume(); return ctx; }
+function sound(r, when) {
+  var a = audio(), t = when || a.currentTime, row = ROWS[r];
+  if (row.drum === "kick") {
+    var o = a.createOscillator(), g = a.createGain(); o.frequency.setValueAtTime(150, t); o.frequency.exponentialRampToValueAtTime(40, t + 0.25);
+    g.gain.setValueAtTime(0.9, t); g.gain.exponentialRampToValueAtTime(0.001, t + 0.3); o.connect(g).connect(a.destination); o.start(t); o.stop(t + 0.3);
+  } else if (row.drum === "hat") {
+    var len = a.sampleRate * 0.08, buf = a.createBuffer(1, len, a.sampleRate), d = buf.getChannelData(0);
+    for (var i = 0; i < len; i++) d[i] = (Math.random() * 2 - 1) * (1 - i / len);
+    var s = a.createBufferSource(), hp = a.createBiquadFilter(), g2 = a.createGain(); hp.type = "highpass"; hp.frequency.value = 6000; g2.gain.value = 0.5;
+    s.buffer = buf; s.connect(hp).connect(g2).connect(a.destination); s.start(t);
+  } else {
+    var o2 = a.createOscillator(), g3 = a.createGain(); o2.type = "triangle"; o2.frequency.value = row.f;
+    g3.gain.setValueAtTime(0.0001, t); g3.gain.exponentialRampToValueAtTime(0.35, t + 0.01); g3.gain.exponentialRampToValueAtTime(0.001, t + 0.45);
+    o2.connect(g3).connect(a.destination); o2.start(t); o2.stop(t + 0.5);
+  }
+}
+
+function build() {
+  var g = $("grid"); g.innerHTML = "";
+  ROWS.forEach(function (row, r) {
+    var l = document.createElement("div"); l.className = "lab"; l.textContent = row.icon; l.onclick = function () { sound(r); }; g.appendChild(l);
+    for (var c = 0; c < STEPS; c++) (function (c) {
+      var d = document.createElement("div"); d.className = "cell" + (row.drum ? " drum" : "") + (c === 3 ? " beat4" : ""); d.id = "c" + r + "_" + c;
+      d.onclick = function () { grid[r][c] = !grid[r][c]; if (grid[r][c]) sound(r); paint(); persist(); $("msg").textContent = ""; };
+      g.appendChild(d);
+    })(c);
+  });
+  paint();
+}
+function paint() {
+  ROWS.forEach(function (row, r) { for (var c = 0; c < STEPS; c++) {
+    var d = $("c" + r + "_" + c); d.textContent = grid[r][c] ? row.flower : "";
+    d.classList.toggle("ghost", !!(ghost && ghost[r][c]));
+  } });
+}
+function persist() { if (!chal) try { localStorage.setItem("beatGarden", JSON.stringify(grid)); } catch (e) {} }
+
+function tick() {
+  document.querySelectorAll(".cell.now").forEach(function (e) { e.classList.remove("now"); });
+  for (var r = 0; r < ROWS.length; r++) {
+    var d = $("c" + r + "_" + step); d.classList.add("now");
+    if (grid[r][step]) { sound(r); d.classList.remove("pop"); void d.offsetWidth; d.classList.add("pop"); }
+  }
+  step = (step + 1) % STEPS;
+}
+function stepMs() { return 60000 / +$("tempo").value / 2; } // 8th notes
+function play() {
+  audio(); playing = !playing; $("playBtn").textContent = playing ? "⏹ Stop" : "▶ Play";
+  clearInterval(timer);
+  if (playing) { step = 0; tick(); timer = setInterval(tick, stepMs()); }
+  else document.querySelectorAll(".cell.now").forEach(function (e) { e.classList.remove("now"); });
+}
+$("tempo").oninput = function () { if (playing) { clearInterval(timer); timer = setInterval(tick, stepMs()); } };
+$("playBtn").onclick = play;
+$("clearBtn").onclick = function () { grid = ROWS.map(function () { return new Array(STEPS).fill(false); }); paint(); persist(); };
+
+// ---------- Challenges ----------
+function pat(rows) { // rows: {rowIndex: "x...x..."}
+  var g = ROWS.map(function () { return new Array(STEPS).fill(false); });
+  Object.keys(rows).forEach(function (r) { rows[r].split("").forEach(function (ch, c) { g[r][c] = ch === "x"; }); }); return g;
+}
+function count(fn) { var n = 0; grid.forEach(function (row, r) { row.forEach(function (on, c) { if (on && fn(r, c)) n++; }); }); return n; }
+function same(t) { return grid.every(function (row, r) { return row.every(function (on, c) { return on === t[r][c]; }); }); }
+var CHALLENGES = [
+  { name: "Plant 3 drum beats", text: "Make a song with exactly 3 🪵 drum beats.", check: function () { return count(function (r) { return r === KICK; }) === 3 ? "" : "You have " + count(function (r) { return r === KICK; }) + " 🪵 beats. You need 3."; } },
+  { name: "Copy: steady beat", text: "Copy the pattern! The white outlines show where to plant.", copy: pat({ 6: "x.x.x.x." }), show: true },
+  { name: "Copy: boom-tss", text: "Copy the pattern with the outlines.", copy: pat({ 6: "x...x...", 5: "..x...x." }), show: true },
+  { name: "Climb the stairs", text: "Play the 5 notes going UP, one after another (🌹 first, 🌻 last).", check: function () {
+      var notes = []; for (var c = 0; c < STEPS; c++) for (var r = NOTES - 1; r >= 0; r--) if (grid[r][c]) notes.push(r);
+      for (var i = 0; i + 4 < notes.length; i++) if (notes[i] === 4 && notes[i + 1] === 3 && notes[i + 2] === 2 && notes[i + 3] === 1 && notes[i + 4] === 0) return "";
+      return "Find the order: 🌹 then 🌸 then 🌼 then 🌷 then 🌻, each in a later column."; } },
+  { name: "Copy by ear: drums", text: "No outlines now! Press 👂 Listen and copy the drums you hear.", copy: pat({ 6: "x..x..x.", 5: "xxxxxxxx" }) },
+  { name: "Every step blooms", text: "Make a song where EVERY column has at least one flower.", check: function () { for (var c = 0; c < STEPS; c++) { var any = false; for (var r = 0; r < ROWS.length; r++) any = any || grid[r][c]; if (!any) return "Column " + (c + 1) + " is empty."; } return ""; } },
+  { name: "Copy: a little tune", text: "Copy the tune with the outlines.", copy: pat({ 4: "x.......", 3: "..x.....", 2: "....x...", 0: "......x." }), show: true },
+  { name: "Copy by ear: tune", text: "Press 👂 Listen and copy the tune. Tap the flowers on the left to hear each note.", copy: pat({ 2: "x...x...", 1: "..x.....", 4: "......x." }) },
+  { name: "Echo song", text: "Make the first 4 columns, then copy them exactly into the last 4 (a pattern that repeats!).", check: function () {
+      if (!count(function () { return true; })) return "Plant something first!";
+      for (var r = 0; r < ROWS.length; r++) for (var c = 0; c < 4; c++) if (grid[r][c] !== grid[r][c + 4]) return "Columns " + (c + 1) + " and " + (c + 5) + " don't match yet."; return ""; } },
+  { name: "Your masterpiece", text: "Make a song with at least 3 different flowers, 4 drum beats, and 12 plants in all.", check: function () {
+      var kinds = 0; for (var r = 0; r < NOTES; r++) if (grid[r].some(Boolean)) kinds++;
+      var drums = count(function (r) { return r >= NOTES; }), all = count(function () { return true; });
+      if (kinds < 3) return "Use at least 3 kinds of flowers (you have " + kinds + ")."; if (drums < 4) return "Add more drum beats (" + drums + " / 4)."; if (all < 12) return "Plant more (" + all + " / 12)."; return ""; } }
+];
+function menu() {
+  var h = "<h2>🏆 Challenges</h2>" + CHALLENGES.map(function (c, i) { return "<button class='ch' onclick='startChal(" + i + ")'>" + (done[i] ? "✅ " : "🌱 ") + (i + 1) + ". " + c.name + "</button>"; }).join("") +
+    "<button class='blue ch' onclick='freeMode()'>🌻 Free garden</button>";
+  show(h);
+}
+function startChal(i) {
+  hide(); if (playing) play();
+  chal = i; var c = CHALLENGES[i];
+  grid = ROWS.map(function () { return new Array(STEPS).fill(false); });
+  ghost = c.copy && c.show ? c.copy : null;
+  $("task").innerHTML = "<b>Challenge " + (i + 1) + ":</b> " + c.text;
+  $("listenBtn").style.display = c.copy ? "" : "none"; $("checkBtn").style.display = "";
+  $("msg").textContent = ""; paint();
+}
+function freeMode() {
+  hide(); chal = null; ghost = null;
+  try { var s = JSON.parse(localStorage.getItem("beatGarden")); grid = s && s.length === ROWS.length ? s : ROWS.map(function () { return new Array(STEPS).fill(false); }); } catch (e) {}
+  $("task").textContent = "🌱 Free garden: tap the dirt to plant flowers, then press ▶ Play!";
+  $("listenBtn").style.display = "none"; $("checkBtn").style.display = "none"; $("msg").textContent = ""; paint();
+}
+$("listenBtn").onclick = function () {
+  var a = audio(), t = a.currentTime + 0.05, ms = stepMs() / 1000, c = CHALLENGES[chal].copy;
+  for (var rep = 0; rep < 2; rep++) for (var s = 0; s < STEPS; s++) for (var r = 0; r < ROWS.length; r++) if (c[r][s]) sound(r, t + (rep * STEPS + s) * ms);
+};
+$("checkBtn").onclick = function () {
+  var c = CHALLENGES[chal], err = c.copy ? (same(c.copy) ? "" : "Not quite the same yet. " + (c.show ? "Match the outlines." : "Listen again!")) : c.check();
+  if (err) { $("msg").textContent = "🤔 " + err; return; }
+  done[chal] = 1; try { localStorage.setItem("beatDone", JSON.stringify(done)); } catch (e) {}
+  if (!playing) play();
+  var nx = chal + 1 < CHALLENGES.length;
+  show("<h2>🎉 You did it!</h2><p style='font-size:20px'>Listen to your garden grow!</p>" + (nx ? "<button class='go' onclick='startChal(" + (chal + 1) + ")'>Next challenge ▶</button>" : "<p>🏆 You finished every challenge!</p>") + " <button onclick='menu()'>☰ List</button>");
+};
+$("modeBtn").onclick = menu;
+function show(h) { $("box").innerHTML = h; $("overlay").classList.add("show"); }
+function hide() { $("overlay").classList.remove("show"); }
+build();
+</script>
+</body>
+</html>
