@@ -1,0 +1,149 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no">
+<title>Number Rocket</title>
+<style>
+  * { box-sizing: border-box; }
+  body { margin: 0; background: #0b1d3a; color: #fff; font-family: "Comic Sans MS", "Trebuchet MS", sans-serif;
+    display: flex; flex-direction: column; align-items: center; min-height: 100vh; user-select: none; -webkit-user-select: none; padding: 0 12px 20px; }
+  h1 { margin: 12px 0 4px; font-size: 28px; }
+  #hud { width: 100%; max-width: 800px; display: flex; justify-content: space-between; font-size: 20px; font-weight: bold; padding: 6px 0; }
+  #prompt { font-size: 40px; font-weight: bold; margin: 14px 0 4px; text-align: center; min-height: 54px; }
+  #feedback { font-size: 22px; min-height: 32px; text-align: center; }
+  #space { position: relative; width: 100%; max-width: 800px; height: 260px; margin-top: 10px; cursor: crosshair; touch-action: none; }
+  #line { position: absolute; left: 30px; right: 30px; bottom: 60px; height: 6px; background: #ffe066; border-radius: 3px; }
+  .tick { position: absolute; bottom: 40px; width: 2px; height: 26px; background: #ffe066; transform: translateX(-1px); }
+  .tick.small { height: 14px; bottom: 46px; opacity: 0.7; }
+  .lab { position: absolute; bottom: 10px; transform: translateX(-50%); font-size: 18px; font-weight: bold; }
+  #rocket { position: absolute; top: 0; font-size: 46px; transform: translateX(-50%); transition: left 0.9s ease-in-out, top 0.9s ease-in; }
+  .mark { position: absolute; bottom: 70px; transform: translateX(-50%); font-size: 26px; }
+  #stars { position: fixed; inset: 0; pointer-events: none; z-index: -1;
+    background-image: radial-gradient(2px 2px at 20% 30%, #fff, transparent), radial-gradient(2px 2px at 70% 20%, #fff, transparent), radial-gradient(1px 1px at 40% 70%, #fff, transparent), radial-gradient(2px 2px at 85% 60%, #fff, transparent), radial-gradient(1px 1px at 10% 85%, #fff, transparent); }
+  button { font-family: inherit; font-size: 22px; font-weight: bold; padding: 10px 18px; border: 3px solid #fff; border-radius: 14px; background: #ffe066; color: #000; cursor: pointer; margin: 4px; }
+  button:disabled { opacity: 0.35; }
+  #overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.6); display: none; align-items: center; justify-content: center; padding: 12px; z-index: 5; }
+  #overlay.show { display: flex; }
+  #box { background: #fff; color: #333; border: 4px solid #333; border-radius: 18px; padding: 18px; text-align: center; max-width: 520px; width: 100%; }
+  #box h2 { margin: 4px 0 10px; }
+  .stage { display: block; width: 100%; text-align: left; font-size: 19px; }
+  .stage small { float: right; }
+  a.home { color: #91a7ff; font-size: 16px; margin-top: 14px; }
+</style>
+</head>
+<body>
+<div id="stars"></div>
+<h1>🚀 Number Rocket</h1>
+<div id="hud"><span id="stageName"></span><span id="round"></span><span id="score">⭐ 0</span></div>
+<div id="prompt"></div>
+<div id="feedback">Tap the number line where the rocket should land!</div>
+<div id="space"><div id="line"></div><div id="rocket">🚀</div></div>
+<button id="nextBtn" style="visibility:hidden">Next ▶</button>
+<a class="home" href="../">← All games</a>
+<div id="overlay"><div id="box"></div></div>
+
+<script>
+// Each stage: number line range, label step, and a question maker -> {text, value, show}
+function rnd(a, b) { return a + Math.floor(Math.random() * (b - a + 1)); }
+var FR = [[1,2],[1,4],[3,4],[1,3],[2,3],[1,5],[2,5],[3,5],[4,5],[1,8],[3,8],[5,8],[7,8]];
+var STAGES = [
+  { name: "Numbers 0–10", min: 0, max: 10, step: 1, label: 1, q: function () { var n = rnd(1, 9); return { text: "Land on " + n, value: n, show: n }; } },
+  { name: "Adding to 10", min: 0, max: 10, step: 1, label: 1, q: function () { var a = rnd(1, 6), b = rnd(1, 10 - a); return { text: "Land on " + a + " + " + b, value: a + b, show: a + "+" + b + "=" + (a + b) }; } },
+  { name: "Numbers 0–20", min: 0, max: 20, step: 1, label: 5, q: function () { var n = rnd(1, 19); return { text: "Land on " + n, value: n, show: n }; } },
+  { name: "Add & subtract to 20", min: 0, max: 20, step: 1, label: 5, q: function () { if (Math.random() < 0.5) { var a = rnd(3, 12), b = rnd(2, 20 - a); return { text: "Land on " + a + " + " + b, value: a + b, show: a + "+" + b + "=" + (a + b) }; } var c = rnd(8, 20), d = rnd(2, c - 1); return { text: "Land on " + c + " − " + d, value: c - d, show: c + "−" + d + "=" + (c - d) }; } },
+  { name: "Numbers 0–100", min: 0, max: 100, step: 10, label: 10, q: function () { var n = rnd(3, 97); return { text: "Land on " + n, value: n, show: n }; } },
+  { name: "Halves & quarters", min: 0, max: 1, step: 0.25, label: 1, q: function () { var f = [[1,2],[1,4],[3,4]][rnd(0, 2)]; return { text: "Land on " + f[0] + "/" + f[1], value: f[0] / f[1], show: f[0] + "/" + f[1] }; } },
+  { name: "Fractions", min: 0, max: 1, step: 0.1, label: 1, q: function () { var f = FR[rnd(0, FR.length - 1)]; return { text: "Land on " + f[0] + "/" + f[1], value: f[0] / f[1], show: f[0] + "/" + f[1] }; } },
+  { name: "Negative numbers", min: -10, max: 10, step: 1, label: 5, q: function () { var n = rnd(-9, 9); if (n === 0) n = -3; return { text: "Land on " + n, value: n, show: n }; } },
+  { name: "Below zero math", min: -10, max: 10, step: 1, label: 5, q: function () { var a = rnd(1, 8), b = rnd(a + 1, a + 9); return { text: "Land on " + a + " − " + b, value: a - b, show: a + "−" + b + "=" + (a - b) }; } }
+];
+var ROUNDS = 10, PASS = 20;
+var best = [];
+try { best = JSON.parse(localStorage.getItem("rocketBest")) || []; } catch (e) {}
+var st, round, score, q, waiting;
+var $ = function (i) { return document.getElementById(i); };
+
+function fmt(v, s) {
+  if (s.max === 1) { if (v === 0) return "0"; if (v === 1) return "1"; return ""; }
+  return String(v);
+}
+
+function drawLine() {
+  var sp = $("space");
+  sp.querySelectorAll(".tick,.lab,.mark").forEach(function (e) { e.remove(); });
+  var s = STAGES[st];
+  for (var v = s.min; v <= s.max + 1e-9; v += s.step) {
+    var vv = Math.round(v * 100) / 100, x = toX(vv);
+    var big = Math.abs(vv / s.label - Math.round(vv / s.label)) < 1e-9 || vv === s.min || vv === s.max;
+    var t = document.createElement("div"); t.className = "tick" + (big ? "" : " small"); t.style.left = x + "px"; sp.appendChild(t);
+    if (big) { var l = document.createElement("div"); l.className = "lab"; l.style.left = x + "px"; l.textContent = fmt(vv, s); sp.appendChild(l); }
+  }
+}
+function width() { return $("space").clientWidth - 60; }
+function toX(v) { var s = STAGES[st]; return 30 + (v - s.min) / (s.max - s.min) * width(); }
+function toV(x) { var s = STAGES[st]; return s.min + (x - 30) / width() * (s.max - s.min); }
+
+function start(i) {
+  st = i; round = 0; score = 0; hide();
+  $("stageName").textContent = STAGES[i].name;
+  next();
+}
+function next() {
+  round++;
+  if (round > ROUNDS) return end();
+  q = STAGES[st].q(); waiting = true;
+  $("prompt").textContent = q.text;
+  $("feedback").textContent = "Tap the number line where the rocket should land!";
+  $("round").textContent = "Round " + round + " / " + ROUNDS;
+  $("score").textContent = "⭐ " + score;
+  $("nextBtn").style.visibility = "hidden";
+  drawLine();
+  var r = $("rocket"); r.style.transition = "none"; r.style.top = "0px"; r.style.left = "50%"; r.textContent = "🚀";
+}
+
+$("space").addEventListener("pointerdown", function (ev) {
+  if (!waiting) return;
+  var s = STAGES[st], rect = this.getBoundingClientRect();
+  var x = Math.max(30, Math.min(30 + width(), ev.clientX - rect.left));
+  var guess = toV(x); waiting = false;
+  var r = $("rocket"); r.style.transition = ""; void r.offsetWidth;
+  r.style.left = x + "px"; r.style.top = "150px";
+  setTimeout(function () {
+    var err = Math.abs(guess - q.value) / (s.max - s.min);
+    var got = err <= 0.025 ? 3 : err <= 0.06 ? 2 : err <= 0.12 ? 1 : 0;
+    score += got;
+    r.textContent = got ? "🚀" : "💥";
+    var m = document.createElement("div"); m.className = "mark"; m.style.left = toX(q.value) + "px"; m.textContent = "🎯"; $("space").appendChild(m);
+    var said = ["Missed! The 🎯 shows where " + q.show + " is.", "Close! ⭐", "Great landing! ⭐⭐", "Perfect landing! ⭐⭐⭐"][got];
+    $("feedback").textContent = said;
+    $("score").textContent = "⭐ " + score;
+    $("nextBtn").style.visibility = "visible";
+  }, 950);
+});
+$("nextBtn").onclick = next;
+
+function end() {
+  best[st] = Math.max(best[st] || 0, score);
+  try { localStorage.setItem("rocketBest", JSON.stringify(best)); } catch (e) {}
+  var pass = score >= PASS, last = st === STAGES.length - 1;
+  show("<h2>" + (pass ? "🎉 Mission complete!" : "🛰️ Mission over") + "</h2><p style='font-size:22px'>You earned ⭐ " + score + " of " + ROUNDS * 3 + "</p>" +
+    "<p>" + (pass ? (last ? "You mastered every stage! 🏆" : "Next stage unlocked!") : "Get " + PASS + " stars to unlock the next stage.") + "</p>" +
+    "<button onclick='start(" + st + ")'>🔄 Again</button>" + (pass && !last ? "<button onclick='start(" + (st + 1) + ")'>Next stage ▶</button>" : "") +
+    "<button onclick='menu()'>☰ Stages</button>");
+}
+function menu() {
+  var h = "<h2>🚀 Choose a mission</h2>";
+  STAGES.forEach(function (s, i) {
+    var ok = i === 0 || (best[i - 1] || 0) >= PASS;
+    h += "<button class='stage' " + (ok ? "onclick='start(" + i + ")'" : "disabled") + ">" + (ok ? "" : "🔒 ") + (i + 1) + ". " + s.name + "<small>" + (best[i] ? "⭐ " + best[i] : "") + "</small></button>";
+  });
+  show(h);
+}
+function show(h) { $("box").innerHTML = h; $("overlay").classList.add("show"); }
+function hide() { $("overlay").classList.remove("show"); }
+window.addEventListener("resize", function () { if (q) drawLine(); });
+menu();
+</script>
+</body>
+</html>
