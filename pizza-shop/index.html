@@ -1,0 +1,186 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no">
+<title>Pizza Shop</title>
+<style>
+  * { box-sizing: border-box; }
+  body { margin: 0; background: #fff4e6; color: #333; font-family: "Comic Sans MS", "Trebuchet MS", sans-serif;
+    display: flex; flex-direction: column; align-items: center; min-height: 100vh; user-select: none; -webkit-user-select: none; padding: 0 12px 20px; }
+  h1 { margin: 12px 0 4px; font-size: 28px; }
+  #hud { width: 100%; max-width: 700px; display: flex; justify-content: space-between; font-size: 20px; font-weight: bold; padding: 4px 0; }
+  #order { width: 100%; max-width: 700px; background: #fff; border: 3px solid #333; border-radius: 16px; padding: 10px 14px; font-size: 22px; display: flex; gap: 12px; align-items: center; }
+  #face { font-size: 48px; }
+  #step { font-size: 21px; margin: 10px 0 4px; text-align: center; min-height: 30px; max-width: 700px; }
+  #msg { font-size: 19px; min-height: 28px; text-align: center; color: #c92a2a; }
+  svg { width: min(320px, 85vw); height: auto; }
+  svg path { stroke: #8b5a2b; stroke-width: 2; cursor: pointer; }
+  .row { display: flex; flex-wrap: wrap; gap: 8px; justify-content: center; margin: 6px 0; }
+  button { font-family: inherit; font-size: 22px; font-weight: bold; padding: 8px 14px; border: 3px solid #333; border-radius: 14px; background: #ffe066; cursor: pointer; min-width: 56px; }
+  button:active { transform: scale(0.95); }
+  button.go { background: #8ce99a; } button.red { background: #ff8787; }
+  .money { background: #b2f2bb; } .coin { background: #ffd8a8; border-radius: 50%; min-width: 64px; height: 64px; padding: 0; font-size: 17px; }
+  #tray { min-height: 40px; font-size: 20px; text-align: center; }
+  .hide { display: none !important; }
+  #overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.45); display: none; align-items: center; justify-content: center; padding: 12px; z-index: 5; }
+  #overlay.show { display: flex; }
+  #box { background: #fff; border: 4px solid #333; border-radius: 18px; padding: 18px; text-align: center; max-width: 480px; }
+  a.home { color: #1971c2; font-size: 16px; margin-top: 12px; }
+</style>
+</head>
+<body>
+<h1>🍕 Pizza Shop</h1>
+<div id="hud"><span id="cust">Customer 1</span><span id="coins">💰 $0.00 tips</span></div>
+<div id="order"><span id="face">🙂</span><span id="orderText"></span></div>
+<div id="step"></div>
+<div id="msg"></div>
+
+<div id="cutRow" class="row"></div>
+<svg id="pizza" viewBox="-110 -110 220 220"></svg>
+<div id="tray" class="hide"></div>
+<div id="moneyRow" class="row hide"></div>
+<div class="row">
+  <button class="red hide" id="undoBtn">↩ Undo</button>
+  <button class="go" id="doneBtn">✅ Done</button>
+</div>
+<a class="home" href="../">← All games</a>
+<div id="overlay"><div id="box"></div></div>
+
+<script>
+var $ = function (i) { return document.getElementById(i); };
+function rnd(a, b) { return a + Math.floor(Math.random() * (b - a + 1)); }
+function pick(a) { return a[rnd(0, a.length - 1)]; }
+function gcd(a, b) { return b ? gcd(b, a % b) : a; }
+function money(c) { return "$" + (c / 100).toFixed(2); }
+var NAMES = { 1: "whole", 2: "half", 3: "third", 4: "quarter", 6: "sixth", 8: "eighth", 12: "twelfth" };
+var FACES = ["🙂", "😀", "🧒", "👩", "👨", "👧", "👦", "👵", "👴", "🧑‍🚀", "🦸", "🐻"];
+var TOPS = [["pepperoni", "#c92a2a"], ["mushrooms", "#868e96"], ["peppers", "#2f9e44"], ["olives", "#212529"], ["pineapple", "#fcc419"]];
+
+var n = 0, tips = 0, order, phase, cut, sel, topped, given;
+try { tips = +localStorage.getItem("pizzaTips") || 0; } catch (e) {}
+
+function newOrder() {
+  n++;
+  var lvl = Math.min(3, Math.floor((n - 1) / 3)); // 0..3
+  var dens = [[2, 4], [2, 3, 4], [3, 4, 6, 8], [3, 4, 6, 8]][lvl];
+  var den = pick(dens), num = rnd(1, den - 1);
+  var g = gcd(num, den); num /= g; den /= g;
+  var t = null;
+  if (lvl >= 1 && Math.random() < 0.8) {
+    // topping fraction of the WHOLE pizza, no bigger than the order
+    var opts = [];
+    [2, 3, 4, 6, 8].forEach(function (d) { for (var k = 1; k < d; k++) if (k / d <= num / den && gcd(k, d) === 1 && [2,3,4,6,8,12].indexOf(den * d / gcd(den, d)) >= 0) opts.push([k, d]); });
+    if (opts.length) { var o = pick(opts); t = { num: o[0], den: o[1], name: pick(TOPS) }; }
+  }
+  // price: whole pizza price split evenly
+  var perSlice = lvl < 3 ? rnd(1, 3) * 100 : pick([125, 150, 175, 199, 225, 249]);
+  var price = perSlice * num + (t ? (lvl < 3 ? 100 : 75) : 0);
+  var bills = [500, 1000, 2000].filter(function (b) { return b > price; });
+  var paid = bills[0];
+  order = { num: num, den: den, top: t, perSlice: perSlice, price: price, paid: paid };
+  cut = 0; sel = []; topped = []; given = [];
+  $("face").textContent = pick(FACES);
+  $("cust").textContent = "Customer " + n;
+  $("orderText").innerHTML = "“I'd like <b>" + frac(num, den) + "</b> of a pizza" +
+    (t ? ", with <b style='color:" + t.name[1] + "'>" + t.name[0] + "</b> on <b>" + frac(t.num, t.den) + "</b> of the pizza" : "") + ", please!”";
+  setPhase("cut");
+}
+function frac(a, b) { return a === b ? "a whole" : a + "/" + b; }
+
+function setPhase(p) {
+  phase = p; $("msg").textContent = "";
+  $("cutRow").classList.toggle("hide", p !== "cut");
+  $("pizza").classList.toggle("hide", p === "pay");
+  $("moneyRow").classList.toggle("hide", p !== "pay");
+  $("tray").classList.toggle("hide", p !== "pay");
+  $("undoBtn").classList.toggle("hide", p !== "pay");
+  $("doneBtn").classList.toggle("hide", p === "cut");
+  if (p === "cut") {
+    $("step").textContent = "1️⃣ How many equal slices should you cut the pizza into?";
+    var r = $("cutRow"); r.innerHTML = "";
+    [2, 3, 4, 6, 8, 12].forEach(function (k) { var b = document.createElement("button"); b.textContent = "🔪 " + k; b.onclick = function () { doCut(k); }; r.appendChild(b); });
+    cut = 0; draw();
+  } else if (p === "slices") {
+    $("step").textContent = "2️⃣ Tap slices to put " + frac(order.num, order.den) + " of the pizza in the box. (" + cut + " slices, each is 1/" + cut + ")";
+  } else if (p === "top") {
+    $("step").innerHTML = "3️⃣ Tap slices to add <b>" + order.top.name[0] + "</b> to " + frac(order.top.num, order.top.den) + " of the pizza.";
+  } else if (p === "pay") {
+    $("step").innerHTML = "4️⃣ It costs <b>" + money(order.price) + "</b>. The customer pays <b>" + money(order.paid) + "</b>. Give the right change!";
+    var m = $("moneyRow"); m.innerHTML = "";
+    [[1000, "$10"], [500, "$5"], [100, "$1"], [25, "25¢"], [10, "10¢"], [5, "5¢"], [1, "1¢"]].forEach(function (c) {
+      if (c[0] >= order.paid) return;
+      var b = document.createElement("button"); b.className = c[0] >= 100 ? "money" : "coin"; b.textContent = c[1];
+      b.onclick = function () { given.push(c); showTray(); }; m.appendChild(b);
+    });
+    showTray();
+  }
+}
+function showTray() {
+  var sum = given.reduce(function (s, c) { return s + c[0]; }, 0);
+  $("tray").innerHTML = given.length ? "Change: " + given.map(function (c) { return c[1]; }).join(" + ") + " = <b>" + money(sum) + "</b>" : "Tap money to give change";
+}
+
+function doCut(k) {
+  var need = order.den, t = order.top;
+  cut = k; sel = []; topped = []; draw();
+  if (k % need !== 0 || (t && k % t.den !== 0)) {
+    $("msg").textContent = "Hmm… with " + k + " slices you can't make exactly " + frac(order.num, order.den) + (t ? " and " + frac(t.num, t.den) : "") + ". Try a different number!";
+    return;
+  }
+  setPhase("slices");
+}
+
+function draw() {
+  var s = $("pizza"), h = "";
+  var N = cut || 1;
+  for (var i = 0; i < N; i++) {
+    var a0 = -Math.PI / 2 + i * 2 * Math.PI / N, a1 = a0 + 2 * Math.PI / N, R = 100;
+    var d = N === 1 ? "M0,-100 A100,100 0 1,1 -0.1,-100 Z" :
+      "M0,0 L" + R * Math.cos(a0) + "," + R * Math.sin(a0) + " A" + R + "," + R + " 0 " + (a1 - a0 > Math.PI ? 1 : 0) + ",1 " + R * Math.cos(a1) + "," + R * Math.sin(a1) + " Z";
+    var on = sel.indexOf(i) >= 0;
+    h += "<path data-i='" + i + "' d='" + d + "' fill='" + (on ? "#ffd43b" : "#fff3bf") + "' opacity='" + (phase === "cut" || on ? 1 : 0.45) + "'/>";
+    if (topped.indexOf(i) >= 0) {
+      var am = (a0 + a1) / 2;
+      [[0.45, 0], [0.72, -0.18], [0.72, 0.18]].forEach(function (p) {
+        var aa = am + p[1] * (2 * Math.PI / N); h += "<circle pointer-events='none' cx='" + 100 * p[0] * Math.cos(aa) + "' cy='" + 100 * p[0] * Math.sin(aa) + "' r='" + Math.max(4, 9 - N / 3) + "' fill='" + order.top.name[1] + "'/>";
+      });
+    }
+  }
+  s.innerHTML = "<circle r='106' fill='#e8a85c'/>" + h;
+}
+$("pizza").addEventListener("click", function (e) {
+  var i = e.target.getAttribute("data-i"); if (i === null) return; i = +i;
+  if (phase === "slices") { var k = sel.indexOf(i); if (k >= 0) sel.splice(k, 1); else sel.push(i); }
+  else if (phase === "top") {
+    if (sel.indexOf(i) < 0) { $("msg").textContent = "Only put toppings on slices in the box!"; return; }
+    var j = topped.indexOf(i); if (j >= 0) topped.splice(j, 1); else topped.push(i);
+  }
+  $("msg").textContent = ""; draw();
+});
+$("undoBtn").onclick = function () { given.pop(); showTray(); };
+$("doneBtn").onclick = function () {
+  if (phase === "slices") {
+    if (sel.length * order.den !== order.num * cut) { $("msg").textContent = "That's " + sel.length + "/" + cut + " of the pizza. The order is " + frac(order.num, order.den) + ". Try again!"; return; }
+    return setPhase(order.top ? "top" : "pay");
+  }
+  if (phase === "top") {
+    if (topped.length * order.top.den !== order.top.num * cut) { $("msg").textContent = "Toppings are on " + topped.length + "/" + cut + " of the pizza. They should be on " + frac(order.top.num, order.top.den) + "."; return; }
+    return setPhase("pay");
+  }
+  if (phase === "pay") {
+    var sum = given.reduce(function (s, c) { return s + c[0]; }, 0), want = order.paid - order.price;
+    if (sum !== want) { $("msg").textContent = sum < want ? "Not enough change yet. " + money(order.paid) + " − " + money(order.price) + " = ?" : "That's too much change!"; return; }
+    var tip = 25 * rnd(1, 4); tips += tip;
+    try { localStorage.setItem("pizzaTips", tips); } catch (e) {}
+    $("coins").textContent = "💰 " + money(tips) + " tips";
+    $("box").innerHTML = "<h2>😋 Yum! Thank you!</h2><p style='font-size:20px'>" + money(order.paid) + " − " + money(order.price) + " = <b>" + money(want) + "</b> change</p><p style='font-size:20px'>The customer left a " + money(tip) + " tip!</p><button class='go' id='nx'>Next customer ▶</button>";
+    $("overlay").classList.add("show");
+    $("nx").onclick = function () { $("overlay").classList.remove("show"); newOrder(); };
+  }
+};
+$("coins").textContent = "💰 " + money(tips) + " tips";
+newOrder();
+</script>
+</body>
+</html>

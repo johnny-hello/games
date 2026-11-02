@@ -1,0 +1,152 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Creature Lab</title>
+<style>
+  * { box-sizing: border-box; }
+  body { margin: 0; background: #f8f0fc; color: #333; font-family: "Comic Sans MS", "Trebuchet MS", sans-serif;
+    display: flex; flex-direction: column; align-items: center; min-height: 100vh; padding: 0 12px 24px; user-select: none; -webkit-user-select: none; }
+  h1 { margin: 12px 0 4px; font-size: 28px; }
+  .wrap { width: 100%; max-width: 760px; }
+  #creature { background: #fff; border: 3px solid #333; border-radius: 18px; padding: 10px; text-align: center; margin: 8px 0; }
+  #art { font-size: 54px; letter-spacing: 4px; min-height: 70px; }
+  #cname { font-size: 26px; font-family: inherit; text-align: center; border: none; border-bottom: 2px dashed #aaa; width: 80%; max-width: 360px; background: transparent; }
+  .cat { margin: 8px 0; }
+  .cat h3 { margin: 4px 0; font-size: 18px; }
+  .opts { display: flex; flex-wrap: wrap; gap: 6px; }
+  button { font-family: inherit; font-size: 18px; font-weight: bold; padding: 6px 12px; border: 3px solid #333; border-radius: 12px; background: #fff; cursor: pointer; }
+  button:active { transform: scale(0.95); }
+  button.on { background: #ffe066; }
+  .hab { font-size: 20px; padding: 10px 14px; }
+  .go { background: #8ce99a; }
+  #result { background: #fff; border: 3px solid #333; border-radius: 18px; padding: 12px 16px; margin: 10px 0; display: none; font-size: 18px; }
+  #result h2 { margin: 4px 0 8px; }
+  #result li { margin: 4px 0; }
+  #zoo { font-size: 17px; }
+  a.home { color: #1971c2; font-size: 16px; margin-top: 14px; }
+</style>
+</head>
+<body>
+<h1>🧪 Creature Lab</h1>
+<div class="wrap">
+  <div id="creature"><div id="art"></div><input id="cname" maxlength="30" placeholder="Name your creature"></div>
+  <div id="parts"></div>
+  <div class="cat"><h3>🌍 Where will it live?</h3><div class="opts" id="habs"></div></div>
+  <div id="result"></div>
+  <div id="zoo"></div>
+</div>
+<a class="home" href="../">← All games</a>
+
+<script>
+var $ = function (i) { return document.getElementById(i); };
+// Each part gives "tags" that habitats look for.
+var CATS = [
+  { key: "skin", title: "🧥 Body covering", opts: [
+    { id: "fur", label: "🦊 Thick fur", art: "🦊", tags: ["warm", "hot"], why: "Thick fur keeps the body warm." },
+    { id: "blubber", label: "🐳 Blubber (fat)", art: "🐋", tags: ["warm", "hot", "swimwarm"], why: "A thick fat layer keeps heat in, even in icy water." },
+    { id: "feathers", label: "🪶 Feathers", art: "🪶", tags: ["warm"], why: "Fluffy feathers trap warm air." },
+    { id: "scales", label: "🦎 Scales", art: "🦎", tags: ["keepwater"], why: "Tough, dry scales stop water escaping from the body." },
+    { id: "thin", label: "🐸 Thin smooth skin", art: "🐸", tags: ["cool", "cold"], why: "Thin skin lets heat out easily." }
+  ]},
+  { key: "move", title: "🦵 How it moves", opts: [
+    { id: "fins", label: "🐟 Fins", art: "🐟", tags: ["swim"], why: "Fins push through water." },
+    { id: "webbed", label: "🦆 Webbed feet", art: "🦆", tags: ["swim", "walk"], why: "Webbed feet paddle in water and walk on land." },
+    { id: "long", label: "🦒 Long legs", art: "🦒", tags: ["walk", "sand"], why: "Long legs keep the body high above hot sand." },
+    { id: "pads", label: "🐻‍❄️ Big padded feet", art: "🐾", tags: ["walk", "snow", "sand"], why: "Big wide feet don't sink in snow or sand." },
+    { id: "claws", label: "🐒 Climbing claws", art: "🐒", tags: ["walk", "climb"], why: "Sharp claws grip tree branches." },
+    { id: "wings", label: "🦅 Wings", art: "🦅", tags: ["fly"], why: "Wings let it fly over everything." }
+  ]},
+  { key: "breathe", title: "🫁 How it breathes", opts: [
+    { id: "gills", label: "🐠 Gills", art: "🫧", tags: ["water-breathe"], why: "Gills take oxygen out of water." },
+    { id: "lungs", label: "🫁 Lungs", art: "🫁", tags: ["air-breathe"], why: "Lungs breathe air." },
+    { id: "blowhole", label: "🐬 Lungs + blowhole", art: "🐬", tags: ["air-breathe", "surface"], why: "A blowhole lets it pop up and breathe air, then dive." }
+  ]},
+  { key: "color", title: "🎨 Color", opts: [
+    { id: "white", label: "⬜ Snowy white", art: "⬜", tags: ["camo-arctic"], why: "White hides it in the snow." },
+    { id: "sandy", label: "🟫 Sandy brown", art: "🟫", tags: ["camo-desert"], why: "Sandy color blends into the desert." },
+    { id: "blue", label: "🟦 Ocean blue", art: "🟦", tags: ["camo-ocean"], why: "Blue blends into the water." },
+    { id: "green", label: "🟩 Leafy green", art: "🟩", tags: ["camo-forest"], why: "Green hides it among leaves." },
+    { id: "rainbow", label: "🌈 Super bright", art: "🌈", tags: [], why: "Bright colors are easy for predators to spot!" }
+  ]},
+  { key: "extra", title: "✨ Special feature", opts: [
+    { id: "ears", label: "🐰 Huge ears", art: "👂", tags: ["cool"], why: "Big ears let extra heat escape." },
+    { id: "hump", label: "🐫 Water-storing hump", art: "🐫", tags: ["storewater"], why: "A hump stores fat, so it can go a long time without food or water." },
+    { id: "tail", label: "🐒 Grabbing tail", art: "➰", tags: ["climb"], why: "A grabbing tail holds on to branches." },
+    { id: "tusks", label: "🦭 Ice tusks", art: "🦷", tags: ["ice"], why: "Tusks help pull up onto the ice." },
+    { id: "glow", label: "💡 Glowing light", art: "💡", tags: ["dark"], why: "A light helps it see in the dark deep sea." }
+  ]}
+];
+// Habitat needs: any one of the tags satisfies the need. "bad" = tags that cause trouble there.
+var HABS = {
+  ocean: { label: "🌊 Ocean", needs: [
+    ["Move in water", ["swim"], "It needs fins or webbed feet to swim."],
+    ["Breathe", ["water-breathe", "surface"], "Under the sea it needs gills, or a blowhole to breathe at the surface."],
+    ["Hide", ["camo-ocean"], "Without blue coloring, predators spot it in the water."]
+  ], bad: [["hot", "Thick fur gets soggy and cold in water. Ocean mammals use blubber instead.", ["fur"]]] },
+  desert: { label: "🏜️ Desert", needs: [
+    ["Save water", ["storewater", "keepwater"], "Water is rare! It needs a hump or scales that keep water in."],
+    ["Stay cool", ["cool", "sand"], "It's very hot. Huge ears or long legs help it cool down."],
+    ["Walk on sand", ["sand"], "Long legs or big padded feet are best on hot, soft sand."],
+    ["Hide", ["camo-desert"], "Sandy color helps it hide."]
+  ], bad: [["hot", "Thick fur or blubber is far too hot in the desert!", ["fur", "blubber"]], ["water-breathe", "Gills need water. There's almost none here!", ["gills"]]] },
+  arctic: { label: "🧊 Arctic", needs: [
+    ["Stay warm", ["warm"], "It's freezing! It needs fur, blubber or feathers."],
+    ["Move on snow or ice", ["snow", "swim", "ice"], "Padded feet, swimming or ice tusks help get around."],
+    ["Hide", ["camo-arctic"], "White coloring hides it in the snow."]
+  ], bad: [["cold", "Thin skin can't keep the body warm. Brrr!", ["thin"]], ["water-breathe", "Gills can't breathe air on the ice.", ["gills"]]] },
+  forest: { label: "🌳 Rainforest", needs: [
+    ["Get around the trees", ["climb", "fly"], "Climbing claws, a grabbing tail or wings help it live in the trees."],
+    ["Breathe air", ["air-breathe"], "Forest animals breathe air with lungs."],
+    ["Hide", ["camo-forest"], "Green hides it among the leaves."]
+  ], bad: [["hot", "Thick fur or blubber makes it overheat in the steamy forest.", ["fur", "blubber"]]] }
+};
+var pick = { skin: "scales", move: "long", breathe: "lungs", color: "rainbow", extra: "ears" };
+var zoo = {}; try { zoo = JSON.parse(localStorage.getItem("creatureZoo")) || {}; } catch (e) {}
+
+function part(cat, id) { return CATS.filter(function (c) { return c.key === cat; })[0].opts.filter(function (o) { return o.id === id; })[0]; }
+function chosen() { return CATS.map(function (c) { return part(c.key, pick[c.key]); }); }
+function render() {
+  var p = $("parts"); p.innerHTML = "";
+  CATS.forEach(function (c) {
+    var d = document.createElement("div"); d.className = "cat"; d.innerHTML = "<h3>" + c.title + "</h3>";
+    var o = document.createElement("div"); o.className = "opts";
+    c.opts.forEach(function (op) { var b = document.createElement("button"); b.textContent = op.label; b.className = pick[c.key] === op.id ? "on" : ""; b.onclick = function () { pick[c.key] = op.id; $("result").style.display = "none"; render(); }; o.appendChild(b); });
+    d.appendChild(o); p.appendChild(d);
+  });
+  $("art").textContent = chosen().map(function (o) { return o.art; }).join("");
+}
+function test(h) {
+  var hab = HABS[h], parts = chosen(), tags = [];
+  parts.forEach(function (p) { tags = tags.concat(p.tags); });
+  var ok = 0, lines = [];
+  hab.needs.forEach(function (n) {
+    var by = parts.filter(function (p) { return p.tags.some(function (t) { return n[1].indexOf(t) >= 0; }); });
+    if (by.length) { ok++; lines.push("✅ <b>" + n[0] + ":</b> " + by[0].why); }
+    else lines.push("❌ <b>" + n[0] + ":</b> " + n[2]);
+  });
+  var problems = hab.bad.filter(function (b) { return parts.some(function (p) { return b[2].indexOf(p.id) >= 0; }); });
+  problems.forEach(function (b) { lines.push("⚠️ " + b[1]); });
+  var total = hab.needs.length, survive = ok === total && !problems.length;
+  var name = $("cname").value.trim() || "Your creature";
+  var title = survive ? "🎉 " + esc(name) + " would THRIVE in the " + hab.label.slice(hab.label.indexOf(" ") + 1) + "!" :
+    ok >= total - 1 && !problems.length ? "😬 " + esc(name) + " might just survive…" : "😢 " + esc(name) + " would have a hard time here.";
+  if (survive) { zoo[h] = { name: name, art: $("art").textContent }; try { localStorage.setItem("creatureZoo", JSON.stringify(zoo)); } catch (e) {} }
+  var r = $("result"); r.style.display = "block";
+  r.innerHTML = "<h2>" + title + "</h2><ul style='padding-left:18px;list-style:none'>" + lines.join("<li>").replace(/^/, "<li>") + "</ul>" +
+    (survive ? "" : "<p>💡 Change some parts and try again!</p>");
+  r.scrollIntoView({ behavior: "smooth", block: "nearest" });
+  drawZoo();
+}
+function esc(s) { return s.replace(/[&<>"']/g, function (c) { return "&#" + c.charCodeAt(0) + ";"; }); }
+function drawZoo() {
+  var keys = Object.keys(HABS), got = keys.filter(function (k) { return zoo[k]; }).length;
+  $("zoo").innerHTML = "<h3>🏆 My creature zoo (" + got + " / " + keys.length + " habitats)</h3>" + keys.map(function (k) {
+    return "<div>" + HABS[k].label + ": " + (zoo[k] ? zoo[k].art + " <b>" + esc(zoo[k].name) + "</b>" : "<i>design a creature that thrives here!</i>") + "</div>"; }).join("");
+}
+Object.keys(HABS).forEach(function (h) { var b = document.createElement("button"); b.className = "hab go"; b.textContent = HABS[h].label; b.onclick = function () { test(h); }; $("habs").appendChild(b); });
+render(); drawZoo();
+</script>
+</body>
+</html>

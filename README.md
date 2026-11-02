@@ -28,3 +28,29 @@ A first coding game. Build a program from arrow blocks to move the robot and col
 - Levels 9–15: 🔁 loops with a block limit, ending with loops inside loops.
 - Tap a block to remove it. Tap a loop's 🔁 ×N to change the count, and use 🔚 to close a loop.
 - Stars: ⭐⭐⭐ for solving on the first try. Progress is saved in the browser.
+
+## 🚀 Number Rocket (`number-rocket/`)
+Tap the number line where the rocket should land. A closer landing earns more stars (up to 3).
+9 stages: 0–10, adding, 0–20, adding and subtracting, 0–100, halves and quarters, fractions, negative numbers, subtracting below zero. Get 20 of 30 stars to unlock the next stage.
+
+## 🍕 Pizza Shop (`pizza-shop/`)
+Customers order a fraction of a pizza, sometimes with a topping on part of it. Cut the pizza into equal slices, box the right amount, add toppings, then give the right change at the register.
+Equivalent fractions count (2/4 is a correct way to make 1/2). Orders get harder: halves and quarters, then thirds, sixths and eighths with toppings, then prices with cents.
+
+## 🧱 Block Builder Balance (`block-balance/`)
+30 levels of balancing a seesaw scale: building to match a sum, the mystery box (□ + 4 = 9), expressions on both sides, take-away (□ − 3 = 5), and many boxes (3 × □ = 12).
+
+## 🐸 Frog Hop Patterns (`frog-hop/`)
+Pick the next number in the pattern before the lily pad sinks. Counting by 2s, 5s, 10s, 3s, 4s, backwards, 6s–9s, tricky starting numbers, then mixed. 3 lives, and the timer gets shorter as you go.
+
+## 🏰 Shape Defender (`shape-defender/`)
+Shape monsters walk toward the castle. Early waves: tap the glowing monster's name. Later waves: tap the monster that matches a clue ("has 4 equal sides", "has a right angle", "has NO corners"). 8 waves and 5 hearts.
+
+## 📖 Story Dice Adventure (`story-dice/`)
+Roll 3–6 picture dice and write (or say 🎤) one part of the story for each picture. The game turns it into a storybook to read page by page, print, or save as a file. Books are kept in "My books".
+
+## 🎵 Beat Garden (`beat-garden/`)
+A step sequencer: 5 flower notes and 2 drums over 8 steps. Plant flowers and press Play. 10 challenges: copying rhythms (with outlines, then by ear), climbing a scale, making a repeating pattern, and a final song.
+
+## 🧪 Creature Lab (`creature-lab/`)
+Pick a body covering, how the creature moves, how it breathes, its color and a special feature. Then test it in the ocean, desert, arctic or rainforest. The game explains each need that's met or missed. Fill your zoo with one creature that thrives in each habitat.
