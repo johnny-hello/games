@@ -1,0 +1,207 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Warehouse Twin</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%23f6c026'/%3E%3Crect x='14' y='30' width='24' height='14' rx='3' fill='%231b2638'/%3E%3Crect x='40' y='16' width='5' height='30' fill='%231b2638'/%3E%3Crect x='40' y='42' width='14' height='4' fill='%231b2638'/%3E%3Ccircle cx='20' cy='48' r='5' fill='%231b2638'/%3E%3Ccircle cx='34' cy='48' r='5' fill='%231b2638'/%3E%3C/svg%3E">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Figtree:wght@400;500;600;700;800&family=JetBrains+Mono:wght@500;700&display=swap">
+<style>
+:root {
+  --bg: #e6e9f5;
+  --glass: rgba(255, 255, 255, .88);
+  --line: rgba(28, 44, 74, .10);
+  --ink: #1b2638; --ink-2: #56667f; --ink-3: #8796ab;
+  --cobalt: #2f5be0; --cobalt-soft: #e7edfd;
+  --safety: #f6c026;
+  --ok: #1f9a63; --ok-soft: #e1f4ea;
+  --warn: #c77f0c; --warn-soft: #fcf0d9;
+  --bad: #d24b42; --bad-soft: #fbe4e2;
+  --mute: #eef1f6;
+  --r: 14px;
+  --shadow: 0 1px 2px rgba(20, 34, 60, .06), 0 8px 24px rgba(20, 34, 60, .10);
+  --f: 'Figtree', system-ui, -apple-system, 'Segoe UI', sans-serif;
+  --mono: 'JetBrains Mono', ui-monospace, Menlo, Consolas, monospace;
+  color-scheme: light;
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; height: 100%; overflow: hidden; background: var(--bg); color: var(--ink); font-family: var(--f); -webkit-font-smoothing: antialiased; }
+#stage { position: fixed; inset: 0; touch-action: none; }
+#stage canvas { display: block; outline: none; }
+button { font: inherit; color: inherit; border: 0; background: none; cursor: pointer; }
+[hidden] { display: none !important; }
+
+.glass { background: var(--glass); backdrop-filter: blur(14px) saturate(1.4); -webkit-backdrop-filter: blur(14px) saturate(1.4); border: 1px solid rgba(255,255,255,.7); box-shadow: var(--shadow); border-radius: var(--r); }
+
+/* Top left: name + mode */
+#brand { position: fixed; top: max(12px, env(safe-area-inset-top)); left: 12px; display: flex; align-items: center; gap: 10px; padding: 8px 10px 8px 10px; }
+#brand .logo { width: 30px; height: 30px; border-radius: 9px; background: var(--safety); display: grid; place-items: center; flex: none; }
+#brand .logo svg { width: 20px; height: 20px; }
+#brand b { font-weight: 800; font-size: 15px; letter-spacing: -.01em; display: block; line-height: 1.1; }
+#brand small { color: var(--ink-3); font-size: 11.5px; font-weight: 600; display: block; }
+.seg { display: inline-flex; background: var(--mute); border-radius: 9px; padding: 2px; gap: 2px; margin-left: 4px; }
+.seg button { font-size: 12px; padding: 4px 10px; border-radius: 7px; font-weight: 700; color: var(--ink-3); }
+.seg button.on { background: #fff; color: var(--ink); box-shadow: 0 1px 2px rgba(20,30,60,.14); }
+#conn { display: inline-flex; align-items: center; gap: 6px; font-size: 11.5px; font-weight: 700; color: var(--ink-2); }
+#conn i { width: 7px; height: 7px; border-radius: 50%; background: var(--ink-3); }
+#conn.ok i { background: #22b573; box-shadow: 0 0 0 3px rgba(34,181,115,.18); }
+#conn.wait i { background: #f2a72b; }
+
+/* Top right: search */
+#search { position: fixed; top: max(12px, env(safe-area-inset-top)); right: 12px; width: min(300px, calc(100vw - 24px)); }
+#search .box { display: flex; align-items: center; gap: 8px; padding: 0 12px; height: 42px; }
+#search svg { width: 16px; height: 16px; color: var(--ink-3); flex: none; }
+#search input { flex: 1; min-width: 0; border: 0; outline: 0; background: transparent; font: 600 14px var(--f); color: var(--ink); }
+#search input::placeholder { color: var(--ink-3); font-weight: 500; }
+#results { margin-top: 6px; padding: 4px; max-height: 50vh; overflow: auto; }
+#results button { display: flex; width: 100%; align-items: center; gap: 8px; text-align: left; padding: 7px 8px; border-radius: 9px; font-size: 13px; }
+#results button:hover, #results button.hi { background: var(--cobalt-soft); }
+#results .k { font: 700 10px var(--mono); padding: 2px 6px; border-radius: 6px; background: var(--mute); color: var(--ink-2); flex: none; }
+#results small { color: var(--ink-3); margin-left: auto; font-size: 11.5px; }
+#results .none { padding: 8px; color: var(--ink-3); font-size: 13px; }
+
+/* Bottom center: selection card */
+#card { position: fixed; left: 50%; bottom: max(14px, env(safe-area-inset-bottom)); transform: translateX(-50%); width: min(380px, calc(100vw - 24px)); padding: 12px 14px; }
+#card .h { display: flex; align-items: center; gap: 8px; }
+#card .h b { font-size: 16px; font-weight: 800; }
+#card .h .x { margin-left: auto; width: 28px; height: 28px; border-radius: 8px; color: var(--ink-3); display: grid; place-items: center; }
+#card .h .x:hover { background: var(--mute); color: var(--ink); }
+.tag { font-size: 11px; font-weight: 700; padding: 3px 8px; border-radius: 999px; background: var(--mute); color: var(--ink-2); }
+.tag.auto { background: var(--cobalt-soft); color: var(--cobalt); }
+.tag.manual { background: #fff4cc; color: #8a6400; }
+.tag.live { background: var(--ok-soft); color: var(--ok); }
+.tag.bad { background: var(--bad-soft); color: var(--bad); }
+#card .st { margin: 6px 0 8px; font-size: 13.5px; color: var(--ink-2); font-weight: 600; }
+#card .st.warn { color: var(--warn); } #card .st.bad { color: var(--bad); }
+#card .kv { display: grid; grid-template-columns: auto 1fr; gap: 3px 14px; font-size: 13px; }
+#card .kv span { color: var(--ink-3); }
+#card .kv b { font-weight: 600; font-family: var(--mono); font-size: 12.5px; }
+#card .kv b.plain { font-family: var(--f); font-size: 13px; }
+#card .acts { display: flex; gap: 6px; margin-top: 10px; flex-wrap: wrap; }
+.btn { padding: 7px 12px; border-radius: 9px; font-size: 13px; font-weight: 700; background: var(--mute); color: var(--ink); }
+.btn:hover { background: #e3e8f0; }
+.btn.primary { background: var(--cobalt); color: #fff; }
+.btn.primary:hover { background: #2549c4; }
+.btn.on { background: var(--cobalt-soft); color: var(--cobalt); }
+#card .tip { margin-top: 8px; font-size: 11.5px; color: var(--ink-3); line-height: 1.45; }
+#card .tip kbd, #help kbd { font: 700 10.5px var(--mono); background: #fff; border: 1px solid var(--line); border-bottom-width: 2px; border-radius: 5px; padding: 0 5px; color: var(--ink-2); }
+#card ul { margin: 8px 0 0; padding: 0; list-style: none; font-size: 12.5px; max-height: 120px; overflow: auto; }
+#card li { display: flex; gap: 8px; padding: 3px 0; border-top: 1px solid var(--line); color: var(--ink-2); }
+#card li time { font: 600 11px var(--mono); color: var(--ink-3); flex: none; }
+
+/* Toast (hints while driving) */
+#toast { position: fixed; top: 74px; left: 50%; transform: translateX(-50%); padding: 8px 14px; font-size: 13.5px; font-weight: 700; white-space: nowrap; max-width: calc(100vw - 24px); overflow: hidden; text-overflow: ellipsis; }
+#toast kbd { font: 700 11px var(--mono); background: var(--cobalt); color: #fff; border-radius: 5px; padding: 1px 6px; margin-right: 4px; }
+
+/* Bottom right: view controls; bottom left: help */
+#viewbar { position: fixed; right: 12px; bottom: max(14px, env(safe-area-inset-bottom)); display: flex; flex-direction: column; gap: 6px; padding: 5px; }
+#viewbar button, #helpbtn { width: 36px; height: 36px; border-radius: 10px; display: grid; place-items: center; color: var(--ink-2); }
+#viewbar button:hover, #helpbtn:hover { background: var(--mute); color: var(--ink); }
+#viewbar button.on { background: var(--cobalt-soft); color: var(--cobalt); }
+#viewbar svg, #helpbtn svg { width: 18px; height: 18px; }
+#helpwrap { position: fixed; left: 12px; bottom: max(14px, env(safe-area-inset-bottom)); }
+#helpbtn { padding: 0; }
+#help { position: absolute; left: 0; bottom: 46px; width: 270px; padding: 12px 14px; font-size: 12.5px; color: var(--ink-2); }
+#help h4 { margin: 0 0 6px; font-size: 13px; color: var(--ink); }
+#help div { display: flex; justify-content: space-between; gap: 10px; padding: 3px 0; }
+#help div span:last-child { text-align: right; }
+
+/* Touch driving controls */
+#touch { position: fixed; inset: auto 0 0 0; height: 0; }
+#joy { position: fixed; left: 22px; bottom: calc(max(14px, env(safe-area-inset-bottom)) + 70px); width: 130px; height: 130px; border-radius: 50%; touch-action: none; }
+#joy i { position: absolute; left: 50%; top: 50%; width: 54px; height: 54px; margin: -27px 0 0 -27px; border-radius: 50%; background: var(--cobalt); box-shadow: 0 4px 12px rgba(47,91,224,.4); }
+#tbtns { position: fixed; right: 62px; bottom: calc(max(14px, env(safe-area-inset-bottom)) + 70px); display: grid; grid-template-columns: 64px 64px; gap: 8px; }
+#tbtns button { height: 56px; border-radius: 14px; font-weight: 800; font-size: 13px; }
+#tbtns .act { grid-column: span 2; background: var(--cobalt); color: #fff; }
+
+/* Driving on a touch screen: compact card at the top, controls at the bottom. */
+body.touchdrive #card { top: calc(max(12px, env(safe-area-inset-top)) + 112px); bottom: auto; padding: 8px 12px; }
+body.touchdrive #card .kv, body.touchdrive #card .tip { display: none; }
+body.touchdrive #card .st { margin: 4px 0 2px; }
+body.touchdrive #card .acts { margin-top: 6px; }
+body.touchdrive #toast { top: auto; bottom: calc(max(14px, env(safe-area-inset-bottom)) + 214px); }
+@media (min-width: 641px) { body.touchdrive #card { top: 70px; } }
+
+#loading { position: fixed; inset: 0; display: grid; place-items: center; color: var(--ink-2); font-weight: 600; }
+
+@media (max-width: 640px) {
+  #brand small { display: none; }
+  #search { top: auto; bottom: auto; top: 66px; left: 12px; right: 12px; width: auto; }
+  #toast { top: 120px; }
+  #card { bottom: max(10px, env(safe-area-inset-bottom)); width: calc(100vw - 72px); left: 12px; transform: none; }
+  #helpwrap { display: none; }
+}
+</style>
+<script type="importmap">
+{
+  "imports": {
+    "three": "https://cdn.jsdelivr.net/npm/three@0.170.0/build/three.module.js",
+    "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.170.0/examples/jsm/"
+  }
+}
+</script>
+</head>
+<body>
+<div id="stage"></div>
+<div id="loading">Loading the warehouse…</div>
+
+<div id="brand" class="glass">
+  <div class="logo"><svg viewBox="0 0 24 24"><rect x="3" y="11" width="10" height="6" rx="1.5" fill="#1b2638"/><rect x="14" y="4" width="2.2" height="13" fill="#1b2638"/><rect x="14" y="15" width="7" height="2" fill="#1b2638"/><circle cx="6" cy="18.5" r="2" fill="#1b2638"/><circle cx="11" cy="18.5" r="2" fill="#1b2638"/></svg></div>
+  <div><b>Warehouse Twin</b><small id="site">Demo DC</small></div>
+  <div class="seg" role="tablist" aria-label="Data source">
+    <button id="modeSim" class="on" title="Simulated forklifts you can drive">Sim</button>
+    <button id="modeLive" title="Real forklift positions from VSLAM">Live</button>
+  </div>
+  <span id="conn" hidden><i></i><span></span></span>
+</div>
+
+<div id="search">
+  <div class="box glass">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="m20 20-4-4"/></svg>
+    <input id="q" placeholder="Find a pallet, forklift or slot" autocomplete="off" spellcheck="false">
+  </div>
+  <div id="results" class="glass" hidden></div>
+</div>
+
+<div id="toast" class="glass" hidden></div>
+<div id="card" class="glass" hidden></div>
+
+<div id="viewbar" class="glass">
+  <button id="rotL" title="Turn view left (Q)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 3-6.7"/><path d="M3 4v5h5"/></svg></button>
+  <button id="rotR" title="Turn view right (E)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-3-6.7"/><path d="M21 4v5h-5"/></svg></button>
+  <button id="home" title="Whole warehouse (H)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 9V5a1 1 0 0 1 1-1h4M20 9V5a1 1 0 0 0-1-1h-4M4 15v4a1 1 0 0 0 1 1h4M20 15v4a1 1 0 0 1-1 1h-4"/></svg></button>
+  <button id="cams" class="on" title="Show the forklift's camera views (V)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 10l5-3v10l-5-3"/><rect x="3" y="6" width="12" height="12" rx="2"/></svg></button>
+</div>
+
+<div id="helpwrap">
+  <button id="helpbtn" class="glass" title="Controls"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M9.5 9.5a2.5 2.5 0 1 1 3.5 2.3c-.6.3-1 .8-1 1.5v.5"/><circle cx="12" cy="17" r=".6" fill="currentColor"/></svg></button>
+  <div id="help" class="glass" hidden>
+    <h4>View</h4>
+    <div><span>Move around</span><span>drag</span></div>
+    <div><span>Zoom</span><span>scroll / pinch</span></div>
+    <div><span>Turn the view</span><span><kbd>Q</kbd> <kbd>E</kbd> or right-drag</span></div>
+    <div><span>Select</span><span>click a forklift or pallet</span></div>
+    <h4 style="margin-top:10px">Driving a forklift</h4>
+    <div><span>Drive</span><span><kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> / arrows</span></div>
+    <div><span>Forks up / down</span><span><kbd>R</kbd> <kbd>F</kbd></span></div>
+    <div><span>Pick up / drop</span><span><kbd>Space</kbd></span></div>
+    <div><span>Follow camera</span><span><kbd>C</kbd></span></div>
+    <div><span>Next forklift</span><span><kbd>Tab</kbd></span></div>
+    <div><span>Back to autopilot</span><span><kbd>Esc</kbd></span></div>
+  </div>
+</div>
+
+<div id="touch" hidden>
+  <div id="joy" class="glass"><i></i></div>
+  <div id="tbtns">
+    <button id="tUp" class="glass">▲ Up</button>
+    <button id="tDown" class="glass">▼ Down</button>
+    <button id="tAct" class="act">Pick / Drop</button>
+  </div>
+</div>
+
+<script type="module" src="./src/main.js"></script>
+</body>
+</html>
