@@ -1,0 +1,813 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no">
+<title>Pip's Big Trip</title>
+<style>
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: #fffbe6; color: #222;
+    font-family: "Comic Sans MS", "Trebuchet MS", sans-serif;
+    display: flex; flex-direction: column; align-items: center;
+    min-height: 100vh; user-select: none; -webkit-user-select: none;
+  }
+  a.back { align-self: flex-start; margin: 8px 12px; font-size: 18px; color: #1971c2; }
+  h1 { margin: 0 0 4px; font-size: 28px; }
+  #hud {
+    width: 100%; max-width: 860px; display: flex; justify-content: space-between;
+    padding: 4px 12px; font-size: 20px; font-weight: bold;
+  }
+  #wrap { position: relative; width: 100%; max-width: 860px; padding: 0 8px; }
+  canvas { width: 100%; background: #fff; border: 3px solid #333; border-radius: 12px; display: block; touch-action: none; }
+  .overlay {
+    position: absolute; inset: 0 8px; background: rgba(255,255,255,0.97);
+    border-radius: 12px; display: none; flex-direction: column;
+    align-items: center; justify-content: center; text-align: center; padding: 10px;
+    overflow: auto;
+  }
+  .overlay.show { display: flex; }
+  .overlay h2 { margin: 4px 0; font-size: 30px; }
+  .say { font-size: 34px; font-weight: bold; margin: 6px 0 14px; line-height: 1.3; }
+  .row { display: flex; gap: 10px; flex-wrap: wrap; justify-content: center; margin: 4px 0; }
+  button {
+    font-family: inherit; font-size: 28px; font-weight: bold;
+    min-width: 70px; padding: 8px 14px; border: 3px solid #333; border-radius: 14px;
+    background: #ffe066; cursor: pointer; color: #222;
+  }
+  button:active { transform: scale(0.95); }
+  button.wrong { background: #ff8787; }
+  button.right { background: #8ce99a; }
+  button.blue { background: #74c0fc; }
+  button.small { font-size: 20px; min-width: 0; padding: 4px 10px; }
+  button:disabled { opacity: 0.5; }
+  .msg { font-size: 26px; min-height: 34px; font-weight: bold; margin-top: 6px; }
+  .big { font-size: 46px; font-weight: bold; margin: 4px 0; }
+  .grid { display: grid; gap: 3px; margin: 6px auto; }
+  .cell {
+    width: 44px; height: 44px; background: #d3f9d8; border-radius: 6px;
+    font-size: 30px; display: flex; align-items: center; justify-content: center;
+  }
+  .cell.hint { background: #fff3bf; }
+  .prog { min-height: 44px; font-size: 28px; background: #f1f3f5; border-radius: 10px; padding: 4px 10px; margin: 4px; min-width: 200px; }
+  .slot { display: flex; align-items: center; gap: 10px; margin: 6px; }
+  .slot button.main { min-width: 300px; text-align: left; font-size: 22px; }
+  #pad { display: flex; gap: 12px; margin: 10px; }
+  #pad button { font-size: 30px; min-width: 70px; padding: 10px; }
+  #help { font-size: 15px; color: #666; text-align: center; }
+  .mapdot { font-size: 34px; }
+  @media (max-width: 600px) {
+    .say { font-size: 24px; } .big { font-size: 32px; }
+    button { font-size: 20px; min-width: 50px; padding: 6px 10px; }
+    .cell { width: 32px; height: 32px; font-size: 22px; }
+    .slot button.main { min-width: 200px; font-size: 18px; }
+  }
+</style>
+</head>
+<body>
+<a class="back" href="../index.html">⬅ All games</a>
+<h1>🐶 Pip's Big Trip 🎈</h1>
+<div id="hud">
+  <span id="hudTown">🌻 Sunny Farm</span>
+  <span id="hudGates">🚪 0 / 3</span>
+  <span id="hudStars">⭐ 0</span>
+</div>
+<div id="wrap">
+  <canvas id="game" width="860" height="400"></canvas>
+
+  <!-- start / save slots -->
+  <div class="overlay show" id="startScreen">
+    <h2>🐶 Pip's Big Trip</h2>
+    <div class="say" style="font-size:24px">Pick your game. 👇</div>
+    <div id="slots"></div>
+  </div>
+
+  <!-- story talk -->
+  <div class="overlay" id="talkScreen">
+    <div class="big" id="talkWho">🐷</div>
+    <div class="say" id="talkLine"></div>
+    <div class="row">
+      <button class="small blue" id="talkSpeak">🔊</button>
+      <button id="talkNext">Next ▶</button>
+    </div>
+  </div>
+
+  <!-- puzzle -->
+  <div class="overlay" id="puzzleScreen">
+    <div class="say" id="pzAsk" style="margin-bottom:4px"></div>
+    <div id="pzBody"></div>
+    <div class="msg" id="pzMsg"></div>
+  </div>
+
+  <!-- map -->
+  <div class="overlay" id="mapScreen">
+    <h2>🗺️ Map</h2>
+    <div class="row" id="mapRow"></div>
+    <div class="say" id="mapText"></div>
+    <button class="blue" id="mapGo">Go! ▶</button>
+  </div>
+</div>
+<div id="pad">
+  <button id="bLeft">◀</button>
+  <button id="bJump">⬆</button>
+  <button id="bTalk">💬</button>
+  <button id="bRight">▶</button>
+</div>
+<div id="help">← → walk • ↑ / Space jump • Enter / 💬 talk</div>
+
+<script>
+// ===================== Story data =====================
+// Words are kept very short and simple so young kids can read alone.
+const TOWNS = [
+  { name: 'Sunny Farm', icon: '🌻', sky: '#e7f5ff', ground: '#8ce99a', deco: ['🌻', '🌾', '🌻', '🏡'],
+    intro: [['🐶', 'Hi! I am Pip.'], ['🎈', 'I had a red balloon.'], ['💨', 'The wind took it!'], ['🐶', 'I will go get it. ➡️']],
+    npcs: [
+      { e: '🐷', lines: ['Hi, Pip!', 'The gate is shut.', 'Can you help me?'], thanks: 'Thank you!' },
+      { e: '🐮', lines: ['Moo!', 'I lost my 🔑 key.', 'Can you get it?'], thanks: 'Moo! Thank you!' },
+      { e: '🐔', lines: ['Cluck!', 'Can you read?', 'Help me read this.'], thanks: 'You can read!' } ],
+    end: [['🐶', 'I see my 🎈 balloon!'], ['🎈', 'It is far, far away.'], ['🐶', 'I will go on!']] },
+  { name: 'Apple Hill', icon: '🍎', sky: '#fff0f6', ground: '#a9e34b', deco: ['🌳', '🍎', '🌳', '🏠'],
+    intro: [['🐶', 'This is Apple Hill.'], ['🍎', 'I see a lot of apples!'], ['🐶', 'Is my 🎈 here?']],
+    npcs: [
+      { e: '🐰', lines: ['Hop, hop!', 'I have lots of 🍎.', 'Help me add them.'], thanks: 'Yay! Thank you!' },
+      { e: '🦔', lines: ['Hi, Pip.', 'My 🔑 key is in the hill.', 'Make a path to it.'], thanks: 'You did it!' },
+      { e: '🐿️', lines: ['Look!', 'What comes next?', 'Can you tell me?'], thanks: 'You are smart!' } ],
+    end: [['🐿️', 'I saw a red 🎈!'], ['🐿️', 'It went to the sea.'], ['🐶', 'To the sea I go!']] },
+  { name: 'Beach Town', icon: '🏖️', sky: '#e3fafc', ground: '#ffe8a3', deco: ['🌴', '🐚', '🌴', '⛱️'],
+    intro: [['🐶', 'I am at the beach!'], ['🌊', 'The sea is big and blue.'], ['🐶', 'I will look for my 🎈.']],
+    npcs: [
+      { e: '🦀', lines: ['Snap, snap!', 'I count 🐚 shells.', 'Count with me!'], thanks: 'Snap! Thanks!' },
+      { e: '🐢', lines: ['Hello, Pip.', 'I am slow.', 'Get my 🔑 key for me?'], thanks: 'Thank you, Pip!' },
+      { e: '🐬', lines: ['Hi!', 'I like to read.', 'Read with me!'], thanks: 'Splash! Good job!' } ],
+    end: [['🐬', 'Your 🎈 went up.'], ['🐬', 'It went to the woods.'], ['🐶', 'Off to the woods!']] },
+  { name: 'Forest Camp', icon: '🌲', sky: '#ebfbee', ground: '#69db7c', deco: ['🌲', '🍄', '🌲', '⛺'],
+    intro: [['🐶', 'The woods are dark.'], ['🌲', 'The trees are so tall.'], ['🐶', 'I am brave. I can do it!']],
+    npcs: [
+      { e: '🦊', lines: ['Hi, Pip.', 'I have 🪵 sticks.', 'Help me add them.'], thanks: 'Thanks, my friend!' },
+      { e: '🦉', lines: ['Hoo, hoo!', 'The 🔑 key is in the trees.', 'Find a path.'], thanks: 'Hoo! Very good!' },
+      { e: '🐻', lines: ['Hi! I am Bear.', 'Look at this.', 'What comes next?'], thanks: 'Big hug! Thanks!' } ],
+    end: [['🦉', 'I saw your 🎈 at night.'], ['🦉', 'The wind took it to the snow.'], ['🐶', 'Brr! I will go!']] },
+  { name: 'Snow Village', icon: '❄️', sky: '#f1f3f5', ground: '#ffffff', deco: ['⛄', '🌲', '❄️', '🏠'],
+    intro: [['🐶', 'It is cold here!'], ['❄️', 'Snow is on the ground.'], ['🐶', 'Is my 🎈 in the snow?']],
+    npcs: [
+      { e: '🐧', lines: ['Hi, Pip!', 'I sell 🧣 hats.', 'Help me add the 🪙 coins.'], thanks: 'Here is a hug!' },
+      { e: '🦌', lines: ['Hello.', 'My 🔑 key is in the ice.', 'Make a path, please.'], thanks: 'Thank you so much!' },
+      { e: '🐻‍❄️', lines: ['Hi! I am White Bear.', 'I have a note.', 'Can you read it?'], thanks: 'You read so well!' } ],
+    end: [['🐧', 'Your 🎈 is in the city.'], ['🐧', 'It is on a tall tower.'], ['🐶', 'To the city!']] },
+  { name: 'Big City', icon: '🏙️', sky: '#e5dbff', ground: '#ced4da', deco: ['🏢', '🚗', '🏬', '🚦'],
+    intro: [['🐶', 'Wow! The city is big.'], ['🚗', 'Cars go fast here.'], ['🐶', 'I will be safe and look.']],
+    npcs: [
+      { e: '🐱', lines: ['Meow!', 'I have bags of 🐟 fish.', 'Help me count them all.'], thanks: 'Meow! Thank you!' },
+      { e: '🤖', lines: ['Beep boop.', 'My path is broken.', 'Help me get the 🔑 key.'], thanks: 'Beep! You fixed it!' },
+      { e: '🐭', lines: ['Squeak!', 'Look at my list.', 'What comes next?'], thanks: 'Squeak! Thanks!' } ],
+    end: [['🤖', 'I see the 🎈 on top!'], ['🤖', 'Oh no! It went to the clouds.'], ['🐶', 'I will go up, up, up!']] },
+  { name: 'Cloud Castle', icon: '🏰', sky: '#fff9db', ground: '#e7f5ff', deco: ['☁️', '🏰', '🌈', '☁️'],
+    intro: [['🐶', 'I am in the clouds!'], ['🏰', 'I see a big castle.'], ['🎈', 'My balloon is here!']],
+    npcs: [
+      { e: '🦄', lines: ['Hello, Pip!', 'The castle has math locks.', 'Can you open them?'], thanks: 'You are a star!' },
+      { e: '🐉', lines: ['Hi! I am a kind dragon.', 'Get the 🔑 key.', 'Use a short path!'], thanks: 'Roar! Great job!' },
+      { e: '👑', lines: ['Hi, Pip!', 'One last test.', 'Then the 🎈 is yours.'], thanks: 'You did it all!' } ],
+    end: [['🎈', 'Pip got the red balloon!'], ['🎉', 'All the friends come to see.'], ['🐶', 'Thank you for the help!'], ['🏆', 'The End. You are a hero!']] },
+];
+
+// gate puzzle type: 0 = math, 1 = code, 2 = read (odd towns) or pattern (even towns)
+const gateType = (t, g) => g === 0 ? 'math' : g === 1 ? 'code' : (t % 2 === 0 ? 'read' : 'pattern');
+
+// ===================== Helpers =====================
+const $ = id => document.getElementById(id);
+const rnd = (a, b) => a + Math.floor(Math.random() * (b - a + 1));
+const pick = arr => arr[rnd(0, arr.length - 1)];
+const shuffle = arr => { for (let i = arr.length - 1; i > 0; i--) { const j = rnd(0, i); [arr[i], arr[j]] = [arr[j], arr[i]]; } return arr; };
+
+function speak(text) {
+  try {
+    const clean = text.replace(/[\u{1F000}-\u{1FFFF}\u{2600}-\u{27BF}\u{FE0F}\u{200D}]/gu, '').trim();
+    speechSynthesis.cancel();
+    const u = new SpeechSynthesisUtterance(clean);
+    u.rate = 0.85;
+    speechSynthesis.speak(u);
+  } catch (e) {}
+}
+
+function numChoices(ans, count = 5) {
+  const set = new Set([ans]);
+  const spread = Math.max(3, Math.ceil(Math.abs(ans) * 0.2));
+  let tries = 0;
+  while (set.size < count && tries++ < 200) { const c = ans + rnd(-spread, spread); if (c >= 0) set.add(c); }
+  let n = ans + 1;
+  while (set.size < count) set.add(n++);
+  return shuffle([...set]);
+}
+
+// ===================== Puzzle generators =====================
+// t = town index (0..6). Math is meant to challenge; words stay simple.
+function makeMath(t) {
+  let q, a;
+  switch (t) {
+    case 0: { // + and - within 10
+      if (Math.random() < 0.5) { const x = rnd(1, 9), y = rnd(1, 10 - x); q = `${x} + ${y} = ?`; a = x + y; }
+      else { const x = rnd(3, 10), y = rnd(1, x); q = `${x} − ${y} = ?`; a = x - y; }
+      break;
+    }
+    case 1: { // within 20, missing number
+      const k = rnd(0, 2);
+      if (k === 0) { const x = rnd(5, 12), y = rnd(3, 20 - x); q = `${x} + ${y} = ?`; a = x + y; }
+      else if (k === 1) { const x = rnd(11, 20), y = rnd(2, 9); q = `${x} − ${y} = ?`; a = x - y; }
+      else { const s = pick([10, 10, 12, 15]), x = rnd(2, s - 2); q = `${x} + ? = ${s}`; a = s - x; }
+      break;
+    }
+    case 2: { // tens and ones, skip counting
+      const k = rnd(0, 2);
+      if (k === 0) { const x = rnd(1, 9) * 10, y = rnd(1, 9); q = `${x} + ${y} = ?`; a = x + y; }
+      else if (k === 1) { const x = rnd(1, 5) * 10, y = rnd(1, 4) * 10; q = `${x} + ${y} = ?`; a = x + y; }
+      else { const st = pick([2, 5, 10]), s = st * rnd(1, 4); q = `${s}, ${s + st}, ${s + 2 * st}, ?`; a = s + 3 * st; }
+      break;
+    }
+    case 3: { // two-digit no carry, emoji stories
+      const k = rnd(0, 2);
+      if (k === 0) { const x = rnd(11, 45), y = rnd(11, 99 - x); const ok = (x % 10) + (y % 10) < 10; if (!ok) return makeMath(t); q = `${x} + ${y} = ?`; a = x + y; }
+      else if (k === 1) { const x = rnd(25, 99), y = rnd(11, x - 5); if (y % 10 > x % 10) return makeMath(t); q = `${x} − ${y} = ?`; a = x - y; }
+      else { const x = rnd(12, 19), y = rnd(2, 9); q = `${x} 🪵 − ${y} 🪵 = ?`; a = x - y; }
+      break;
+    }
+    case 4: { // carrying, coins
+      const k = rnd(0, 2);
+      if (k === 0) { const x = rnd(15, 59), y = rnd(15, 40); q = `${x} + ${y} = ?`; a = x + y; }
+      else if (k === 1) { const x = rnd(40, 99), y = rnd(12, x - 8); q = `${x} − ${y} = ?`; a = x - y; }
+      else { const c = [10, 10, 5, 5, 1, 1, 1].slice(0, rnd(3, 6)); q = c.map(v => `🪙${v}`).join(' + ') + ' = ?'; a = c.reduce((s, v) => s + v, 0); }
+      break;
+    }
+    case 5: { // equal groups, x2 x5 x10
+      const k = rnd(0, 1);
+      const m = pick([2, 5, 10]), n = rnd(2, 6);
+      if (k === 0) { q = `${n} × ${m} = ?`; a = n * m; }
+      else { q = `${n} bags. ${m} 🐟 in each.\nHow many 🐟?`; a = n * m; }
+      break;
+    }
+    default: { // mix
+      const k = rnd(0, 3);
+      if (k === 0) { const x = rnd(3, 10), y = rnd(3, 10); q = `${x} × ${y} = ?`; a = x * y; }
+      else if (k === 1) { const y = rnd(2, 10), r = rnd(2, 10); q = `${y * r} ÷ ${y} = ?`; a = r; }
+      else if (k === 2) { const x = rnd(35, 89), y = rnd(16, 99 - x); q = `${x} + ${y} = ?`; a = x + y; }
+      else { const x = rnd(50, 99), y = rnd(17, x - 9); q = `${x} − ${y} = ?`; a = x - y; }
+    }
+  }
+  return { q, a, choices: numChoices(a) };
+}
+
+const WORDS = [
+  [['cat', '🐱'], ['dog', '🐶'], ['sun', '☀️'], ['hat', '🎩'], ['pig', '🐷'], ['bus', '🚌'], ['bed', '🛏️'], ['egg', '🥚'], ['cup', '🥤'], ['bee', '🐝']],
+  [['fish', '🐟'], ['frog', '🐸'], ['star', '⭐'], ['tree', '🌳'], ['cake', '🎂'], ['moon', '🌙'], ['ship', '🚢'], ['duck', '🦆'], ['boat', '⛵'], ['milk', '🥛']],
+  [['rabbit', '🐰'], ['rocket', '🚀'], ['pizza', '🍕'], ['turtle', '🐢'], ['flower', '🌸'], ['apple', '🍎'], ['snake', '🐍'], ['train', '🚂'], ['house', '🏠'], ['horse', '🐴']],
+];
+// sentence puzzles for later towns: [sentence with ___, answer, wrong options]
+const SENTENCES = [
+  ['The 🐸 can ___.', 'hop', ['sing', 'read', 'fly']],
+  ['The ☀️ is ___.', 'hot', ['cold', 'wet', 'sad']],
+  ['A 🐟 can ___.', 'swim', ['run', 'jump', 'sit']],
+  ['The ❄️ is ___.', 'cold', ['hot', 'red', 'big']],
+  ['I eat with a ___. 🥄', 'spoon', ['shoe', 'book', 'bed']],
+  ['A 🐦 can ___.', 'fly', ['swim', 'dig', 'read']],
+  ['I sleep in a ___. 🛏️', 'bed', ['cup', 'car', 'tree']],
+  ['The 🌙 comes at ___.', 'night', ['lunch', 'school', 'day']],
+];
+
+function makeRead(t) {
+  if (t >= 3 && Math.random() < 0.6) {
+    const [s, a, w] = pick(SENTENCES);
+    return { kind: 'sentence', q: s, a, choices: shuffle([a, ...w]) };
+  }
+  const level = WORDS[Math.min(2, Math.floor(t / 2))];
+  const [word, emo] = pick(level);
+  const others = shuffle(level.filter(x => x[0] !== word)).slice(0, 3).map(x => x[0]);
+  return { kind: 'word', q: emo, a: word, choices: shuffle([word, ...others]) };
+}
+
+const PICS = ['🔴', '🔵', '🟡', '🟢', '⭐', '🍎', '🐶', '🌸'];
+function makePattern(t) {
+  if (t >= 3 && Math.random() < 0.4) { // number pattern
+    const st = pick(t >= 5 ? [3, 4, 5, 10] : [2, 5, 10]), s = rnd(1, 5) * st;
+    const seq = [s, s + st, s + 2 * st, s + 3 * st];
+    const a = s + 4 * st;
+    return { show: seq.join(', ') + ', ?', a: String(a), choices: numChoices(a, 4).map(String) };
+  }
+  const [A, B, C] = shuffle([...PICS]).slice(0, 3);
+  const units = t < 2 ? [[A, B]] : t < 4 ? [[A, B], [A, A, B], [A, B, B]] : [[A, B, C], [A, A, B], [A, B, B, C], [A, B, C, C]];
+  const unit = pick(units);
+  const len = unit.length * 2 + rnd(0, unit.length - 1);
+  const seq = Array.from({ length: len }, (_, i) => unit[i % unit.length]);
+  const a = unit[len % unit.length];
+  const pool = [...new Set([A, B, C, ...shuffle([...PICS])])].slice(0, 4);
+  if (!pool.includes(a)) pool[0] = a;
+  return { show: seq.join(' ') + ' ❓', a, choices: shuffle(pool) };
+}
+
+// coding: build a grid with a guaranteed path from 🐶 to 🔑
+function makeCode(t) {
+  const cols = t === 0 ? 4 : t < 3 ? 5 : t < 5 ? 6 : 7;
+  const rows = t === 0 ? 3 : t < 4 ? 4 : 5;
+  let r = rnd(0, rows - 1), c = 0;
+  const path = [[r, c]];
+  const seen = new Set([r + ',' + c]);
+  while (c < cols - 1) {
+    const opts = [[0, 1], [0, 1]];
+    if (t >= 1) { opts.push([1, 0], [-1, 0]); }
+    const [dr, dc] = pick(opts);
+    const nr = r + dr, nc = c + dc;
+    if (nr < 0 || nr >= rows || seen.has(nr + ',' + nc)) continue;
+    // avoid going up/down twice in a row back over itself
+    r = nr; c = nc; seen.add(r + ',' + c); path.push([r, c]);
+  }
+  const rocks = new Set();
+  const density = 0.15 + t * 0.05;
+  for (let i = 0; i < rows; i++) for (let j = 0; j < cols; j++) {
+    if (!seen.has(i + ',' + j) && Math.random() < density) rocks.add(i + ',' + j);
+  }
+  // shortest block count (with repeat ×2/×3 allowed from town 3)
+  let runs = [];
+  for (let i = 1; i < path.length; i++) {
+    const d = dirName(path[i][0] - path[i - 1][0], path[i][1] - path[i - 1][1]);
+    if (runs.length && runs[runs.length - 1][0] === d) runs[runs.length - 1][1]++;
+    else runs.push([d, 1]);
+  }
+  const useRepeat = t >= 2;
+  const minBlocks = useRepeat ? runs.reduce((s, [, n]) => s + Math.ceil(n / 3), 0) : path.length - 1;
+  const limit = t >= 4 ? minBlocks + (t >= 6 ? 0 : 1) : null;
+  return { rows, cols, start: path[0], goal: path[path.length - 1], path, rocks, useRepeat, limit };
+}
+function dirName(dr, dc) { return dr === -1 ? 'U' : dr === 1 ? 'D' : dc === -1 ? 'L' : 'R'; }
+const ARROW = { U: '⬆️', D: '⬇️', L: '⬅️', R: '➡️' };
+const DELTA = { U: [-1, 0], D: [1, 0], L: [0, -1], R: [0, 1] };
+
+// ===================== Save slots =====================
+const SAVE_KEY = 'pipTripSaves';
+let saves = [null, null, null];
+try { saves = JSON.parse(localStorage.getItem(SAVE_KEY)) || saves; } catch (e) {}
+let slot = 0, save = null;
+
+function writeSaves() {
+  try { localStorage.setItem(SAVE_KEY, JSON.stringify(saves)); } catch (e) {}
+}
+function persist() { save.x = player.x; saves[slot] = save; writeSaves(); }
+
+function renderSlots() {
+  const box = $('slots');
+  box.innerHTML = '';
+  saves.forEach((s, i) => {
+    const row = document.createElement('div');
+    row.className = 'slot';
+    const b = document.createElement('button');
+    b.className = 'main' + (s ? ' blue' : '');
+    if (s) {
+      const town = TOWNS[Math.min(s.town, TOWNS.length - 1)];
+      b.textContent = s.done ? `🏆 ${s.name} — The End! ⭐ ${s.stars}` : `▶ ${s.name} — ${town.icon} ${town.name} ⭐ ${s.stars}`;
+    } else b.textContent = `➕ New game ${i + 1}`;
+    b.onclick = () => s ? loadSlot(i) : newSlot(i);
+    row.appendChild(b);
+    if (s) {
+      const del = document.createElement('button');
+      del.className = 'small';
+      del.textContent = '🗑️';
+      del.onclick = () => { if (confirm(`Delete ${s.name}'s game?`)) { saves[i] = null; writeSaves(); renderSlots(); } };
+      row.appendChild(del);
+    }
+    box.appendChild(row);
+  });
+}
+
+function newSlot(i) {
+  let name = (prompt('What is your name?') || '').trim().slice(0, 12);
+  if (!name) name = 'Player ' + (i + 1);
+  slot = i;
+  save = { name, town: 0, gates: [false, false, false], stars: 0, x: 80, done: false, introSeen: false };
+  saves[i] = save; writeSaves();
+  $('startScreen').classList.remove('show');
+  enterTown();
+}
+function loadSlot(i) {
+  slot = i; save = saves[i];
+  $('startScreen').classList.remove('show');
+  if (save.done) { save.town = 0; save.gates = [false, false, false]; save.x = 80; save.done = false; save.introSeen = false; }
+  enterTown();
+}
+
+// ===================== World =====================
+const canvas = $('game');
+const ctx = canvas.getContext('2d');
+const W = canvas.width, H = canvas.height, GROUND = H - 50;
+const TOWN_W = 2600;
+const NPC_X = [600, 1300, 2000];
+const GATE_OFFSET = 110;
+const END_X = 2450;
+
+const player = { x: 80, y: GROUND - 40, vy: 0, w: 34, h: 40, onGround: true, face: 1, step: 0 };
+const keys = {};
+let mode = 'menu'; // menu | walk | talk | puzzle | map
+let camX = 0, frame = 0, decoItems = [], clouds = [], poofs = [];
+
+function town() { return TOWNS[save.town]; }
+
+function enterTown() {
+  const T = town();
+  player.x = save.x || 80; player.y = GROUND - player.h; player.vy = 0;
+  decoItems = [];
+  for (let x = 150; x < TOWN_W; x += rnd(160, 260)) {
+    if (NPC_X.some(n => Math.abs(n - x) < 110 || Math.abs(n + GATE_OFFSET - x) < 60) || Math.abs(END_X - x) < 90) continue;
+    decoItems.push({ x, e: pick(T.deco), s: rnd(34, 54) });
+  }
+  clouds = Array.from({ length: 8 }, () => ({ x: rnd(0, TOWN_W), y: rnd(25, 90) }));
+  updateHud();
+  mode = 'walk';
+  if (!save.introSeen) {
+    talk(T.intro, () => { save.introSeen = true; persist(); });
+  }
+}
+
+function updateHud() {
+  const T = town();
+  $('hudTown').textContent = `${T.icon} ${T.name} (${save.town + 1}/${TOWNS.length})`;
+  $('hudGates').textContent = `🚪 ${save.gates.filter(Boolean).length} / 3`;
+  $('hudStars').textContent = `⭐ ${save.stars}`;
+}
+
+// ===================== Input =====================
+document.addEventListener('keydown', e => {
+  if (['Space', 'ArrowUp', 'ArrowLeft', 'ArrowRight', 'ArrowDown'].includes(e.code) && mode === 'walk') e.preventDefault();
+  keys[e.code] = true;
+  if (mode === 'walk') {
+    if (e.code === 'Space' || e.code === 'ArrowUp') jump();
+    if (e.code === 'Enter' || e.code === 'KeyE') tryTalk();
+  } else if (mode === 'talk' && (e.code === 'Enter' || e.code === 'Space')) {
+    e.preventDefault(); $('talkNext').click();
+  }
+});
+document.addEventListener('keyup', e => { keys[e.code] = false; });
+
+function hold(btn, code) {
+  const on = e => { e.preventDefault(); keys[code] = true; };
+  const off = () => { keys[code] = false; };
+  btn.addEventListener('pointerdown', on);
+  ['pointerup', 'pointerleave', 'pointercancel'].forEach(ev => btn.addEventListener(ev, off));
+}
+hold($('bLeft'), 'ArrowLeft');
+hold($('bRight'), 'ArrowRight');
+$('bJump').addEventListener('pointerdown', e => { e.preventDefault(); jump(); });
+$('bTalk').addEventListener('pointerdown', e => { e.preventDefault(); tryTalk(); });
+canvas.addEventListener('pointerdown', () => { if (mode === 'walk') { if (nearNpc() >= 0 || nearEnd()) tryTalk(); else jump(); } });
+
+function jump() { if (mode === 'walk' && player.onGround) { player.vy = -11; player.onGround = false; } }
+
+function nearNpc() {
+  for (let i = 0; i < 3; i++) if (Math.abs(player.x - NPC_X[i]) < 100) return i;
+  return -1;
+}
+function nearEnd() { return save.gates.every(Boolean) && Math.abs(player.x - END_X) < 80; }
+
+function tryTalk() {
+  if (mode !== 'walk') return;
+  const T = town();
+  const i = nearNpc();
+  if (i >= 0) {
+    const npc = T.npcs[i];
+    if (save.gates[i]) { talk([[npc.e, npc.thanks]]); return; }
+    talk(npc.lines.map(l => [npc.e, l]), () => startPuzzle(i));
+    return;
+  }
+  if (nearEnd()) finishTown();
+}
+
+// ===================== Talk =====================
+let talkQueue = [], talkDone = null;
+function talk(lines, done) {
+  mode = 'talk';
+  talkQueue = lines.slice();
+  talkDone = done || null;
+  $('talkScreen').classList.add('show');
+  showLine();
+}
+function showLine() {
+  const [who, line] = talkQueue[0];
+  $('talkWho').textContent = who;
+  $('talkLine').textContent = line;
+}
+$('talkSpeak').onclick = () => speak($('talkLine').textContent);
+$('talkNext').onclick = () => {
+  talkQueue.shift();
+  if (talkQueue.length) { showLine(); return; }
+  $('talkScreen').classList.remove('show');
+  mode = 'walk';
+  const d = talkDone; talkDone = null;
+  if (d) d();
+};
+
+// ===================== Puzzles =====================
+let pz = null;
+function startPuzzle(gate) {
+  mode = 'puzzle';
+  const type = gateType(save.town, gate);
+  const need = type === 'math' ? 3 : type === 'code' ? 1 : 2;
+  pz = { gate, type, need, solved: 0, wrong: 0 };
+  $('puzzleScreen').classList.add('show');
+  nextPuzzle();
+}
+
+function stars() { return '⭐'.repeat(pz.solved) + '☆'.repeat(pz.need - pz.solved); }
+
+function nextPuzzle() {
+  pz.wrong = 0;
+  $('pzMsg').textContent = stars();
+  if (pz.type === 'math') showChoice('Tap the answer. 👆', makeMath(save.town), 'big');
+  else if (pz.type === 'read') {
+    const r = makeRead(save.town);
+    showChoice(r.kind === 'word' ? 'Tap the word. 👆' : 'Tap the word. 👆', { q: r.q, a: r.a, choices: r.choices }, r.kind === 'word' ? 'huge' : 'big');
+  } else if (pz.type === 'pattern') {
+    const p = makePattern(save.town);
+    showChoice('What is next? ❓', { q: p.show, a: p.a, choices: p.choices }, 'big');
+  } else showCode(makeCode(save.town));
+}
+
+function showChoice(ask, item, size) {
+  $('pzAsk').textContent = ask;
+  const body = $('pzBody');
+  body.innerHTML = '';
+  const q = document.createElement('div');
+  q.className = 'big';
+  q.style.whiteSpace = 'pre-line';
+  if (size === 'huge') q.style.fontSize = '80px';
+  q.textContent = item.q;
+  body.appendChild(q);
+  const row = document.createElement('div');
+  row.className = 'row';
+  item.choices.forEach(c => {
+    const b = document.createElement('button');
+    b.textContent = c;
+    b.onclick = () => {
+      if (b.disabled) return;
+      if (String(c) === String(item.a)) {
+        b.classList.add('right');
+        [...row.children].forEach(x => x.disabled = true);
+        gotIt();
+      } else {
+        b.classList.add('wrong'); b.disabled = true;
+        pz.wrong++;
+        $('pzMsg').textContent = 'Try again! 💛';
+        if (pz.wrong === 2) { // hint: take away more wrong answers
+          [...row.children].filter(x => !x.disabled && String(x.textContent) !== String(item.a)).slice(0, 2).forEach(x => { x.disabled = true; });
+          $('pzMsg').textContent = 'Try again! 💛 You can do it!';
+        }
+      }
+    };
+    row.appendChild(b);
+  });
+  body.appendChild(row);
+}
+
+function showCode(g) {
+  const limitText = g.limit ? ` Use ${g.limit} 🧱 or less.` : '';
+  $('pzAsk').textContent = 'Make a path to the 🔑.' + limitText;
+  const body = $('pzBody');
+  body.innerHTML = '';
+  const grid = document.createElement('div');
+  grid.className = 'grid';
+  grid.style.gridTemplateColumns = `repeat(${g.cols}, min-content)`; grid.style.justifyContent = "center";
+  const cells = [];
+  for (let i = 0; i < g.rows; i++) for (let j = 0; j < g.cols; j++) {
+    const d = document.createElement('div');
+    d.className = 'cell';
+    cells.push(d); grid.appendChild(d);
+  }
+  const cellAt = (r, c) => cells[r * g.cols + c];
+  let program = [];
+  const draw = (pr, pc, showHint) => {
+    for (let i = 0; i < g.rows; i++) for (let j = 0; j < g.cols; j++) {
+      const k = i + ',' + j, el = cellAt(i, j);
+      el.textContent = g.rocks.has(k) ? '🪨' : (i === g.goal[0] && j === g.goal[1]) ? '🔑' : '';
+      el.classList.toggle('hint', !!showHint && g.path.some(p => p[0] === i && p[1] === j));
+    }
+    cellAt(pr, pc).textContent = '🐶';
+  };
+  draw(g.start[0], g.start[1]);
+  body.appendChild(grid);
+
+  const prog = document.createElement('div');
+  prog.className = 'prog';
+  const showProg = () => {
+    prog.textContent = program.length ? program.map(([d, n]) => ARROW[d] + (n > 1 ? '×' + n : '')).join(' ') : '🧱 ...';
+  };
+  showProg();
+  body.appendChild(prog);
+
+  const row = document.createElement('div');
+  row.className = 'row';
+  let running = false;
+  const add = (label, fn) => { const b = document.createElement('button'); b.className = 'small'; b.textContent = label; b.onclick = () => { if (!running) { fn(); showProg(); } }; row.appendChild(b); return b; };
+  ['L', 'U', 'D', 'R'].forEach(d => add(ARROW[d], () => program.push([d, 1])));
+  if (g.useRepeat) {
+    add('×2', () => { if (program.length) program[program.length - 1][1] = 2; });
+    add('×3', () => { if (program.length) program[program.length - 1][1] = 3; });
+  }
+  add('⌫', () => program.pop());
+  const go = add('▶ Go', () => run());
+  go.classList.add('right');
+  body.appendChild(row);
+
+  function fail(msg) {
+    running = false;
+    pz.wrong++;
+    $('pzMsg').textContent = msg;
+    setTimeout(() => draw(g.start[0], g.start[1], pz.wrong >= 2), 700);
+  }
+  function run() {
+    if (!program.length) return;
+    if (g.limit && program.length > g.limit) { $('pzMsg').textContent = `Too many 🧱! Use ${g.limit}.`; return; }
+    running = true;
+    const steps = [];
+    program.forEach(([d, n]) => { for (let i = 0; i < n; i++) steps.push(d); });
+    let [r, c] = g.start, i = 0;
+    const tick = () => {
+      if (i >= steps.length) {
+        if (r === g.goal[0] && c === g.goal[1]) { gotIt(); } else fail('Not the 🔑. Try again! 💛');
+        return;
+      }
+      const [dr, dc] = DELTA[steps[i++]];
+      r += dr; c += dc;
+      if (r < 0 || r >= g.rows || c < 0 || c >= g.cols) return fail('Oops! Off the map. Try again! 💛');
+      if (g.rocks.has(r + ',' + c)) return fail('Bonk! A 🪨 rock. Try again! 💛');
+      draw(r, c, pz.wrong >= 2);
+      if (r === g.goal[0] && c === g.goal[1] && i === steps.length) { setTimeout(gotIt, 300); return; }
+      setTimeout(tick, 350);
+    };
+    setTimeout(tick, 200);
+  }
+}
+
+function gotIt() {
+  pz.solved++;
+  save.stars++;
+  updateHud();
+  $('pzMsg').textContent = stars() + ' ' + pick(['Yes! 🎉', 'Good job! 🌟', 'You got it! 🙌', 'Wow! 🎊']);
+  setTimeout(() => {
+    if (pz.solved < pz.need) { nextPuzzle(); return; }
+    $('puzzleScreen').classList.remove('show');
+    save.gates[pz.gate] = true;
+    poofs.push({ x: NPC_X[pz.gate] + GATE_OFFSET, t: 0 });
+    persist(); updateHud();
+    mode = 'walk';
+    const npc = town().npcs[pz.gate];
+    const after = save.gates.every(Boolean) ? [[npc.e, npc.thanks], ['🐶', 'The way is open! ➡️']] : [[npc.e, npc.thanks], ['🚪', 'The gate is open!']];
+    talk(after);
+  }, 900);
+}
+
+// ===================== Town end & map =====================
+function finishTown() {
+  talk(town().end, () => {
+    if (save.town >= TOWNS.length - 1) {
+      save.done = true; persist();
+      showMap(true);
+      return;
+    }
+    save.town++; save.gates = [false, false, false]; save.x = 80; save.introSeen = false;
+    persist();
+    showMap(false);
+  });
+}
+
+function showMap(won) {
+  mode = 'map';
+  const row = $('mapRow');
+  row.innerHTML = '';
+  TOWNS.forEach((T, i) => {
+    const s = document.createElement('span');
+    s.className = 'mapdot';
+    s.textContent = i < save.town || won ? '✅' : i === save.town ? '🐶' : T.icon;
+    s.title = T.name;
+    row.appendChild(s);
+    if (i < TOWNS.length - 1) { const d = document.createElement('span'); d.className = 'mapdot'; d.textContent = '·'; row.appendChild(d); }
+  });
+  $('mapText').textContent = won ? `🏆 You did it, ${save.name}! ⭐ ${save.stars}` : `Next: ${town().icon} ${town().name}`;
+  $('mapGo').textContent = won ? 'Play again ▶' : 'Go! ▶';
+  $('mapScreen').classList.add('show');
+  $('mapGo').onclick = () => {
+    $('mapScreen').classList.remove('show');
+    if (won) { mode = 'menu'; renderSlots(); $('startScreen').classList.add('show'); return; }
+    enterTown();
+  };
+}
+
+// ===================== Update & draw =====================
+function update() {
+  frame++;
+  if (mode !== 'walk') return;
+  let dx = 0;
+  if (keys.ArrowLeft) dx -= 3.5;
+  if (keys.ArrowRight) dx += 3.5;
+  if (dx) { player.face = Math.sign(dx); player.step++; }
+  let nx = Math.max(20, Math.min(TOWN_W - 60, player.x + dx));
+  // closed gates block the way
+  for (let i = 0; i < 3; i++) {
+    const gx = NPC_X[i] + GATE_OFFSET;
+    if (!save.gates[i] && player.x <= gx - 95 && nx > gx - 95) nx = gx - 95;
+  }
+  player.x = nx;
+  player.vy += 0.6;
+  player.y += player.vy;
+  if (player.y >= GROUND - player.h) { player.y = GROUND - player.h; player.vy = 0; player.onGround = true; }
+  camX = Math.max(0, Math.min(TOWN_W - W, player.x - 280));
+  if (frame % 120 === 0) { save.x = player.x; }
+}
+
+function emoji(e, x, y, size) {
+  ctx.font = `${size}px "Apple Color Emoji","Segoe UI Emoji","Noto Color Emoji",sans-serif`;
+  ctx.textAlign = 'center'; ctx.textBaseline = 'bottom';
+  ctx.fillText(e, x, y);
+}
+
+function draw() {
+  if (!save) { ctx.fillStyle = '#e7f5ff'; ctx.fillRect(0, 0, W, H); drawPup(140, GROUND - 40, 1, 0); ctx.fillStyle = '#555'; ctx.fillRect(0, GROUND, W, 3); return; }
+  const T = town();
+  ctx.fillStyle = T.sky; ctx.fillRect(0, 0, W, H);
+  ctx.save();
+  ctx.translate(-camX, 0);
+  // clouds (slow parallax)
+  ctx.fillStyle = 'rgba(255,255,255,0.9)';
+  clouds.forEach(c => {
+    const x = c.x + camX * 0.5;
+    ctx.beginPath(); ctx.ellipse(x, c.y, 36, 13, 0, 0, Math.PI * 2); ctx.ellipse(x + 22, c.y - 8, 20, 11, 0, 0, Math.PI * 2); ctx.fill();
+  });
+  // balloon far away hint
+  emoji('🎈', TOWN_W - 120 + camX * 0.8 - camX * 0.8, 70 + Math.sin(frame / 30) * 6, 28);
+  // ground
+  ctx.fillStyle = T.ground; ctx.fillRect(0, GROUND, TOWN_W, H - GROUND);
+  ctx.fillStyle = '#555'; ctx.fillRect(0, GROUND, TOWN_W, 3);
+  for (let x = 0; x < TOWN_W; x += 47) ctx.fillRect(x + (x % 3) * 7, GROUND + 12 + (x % 4) * 6, 6, 2);
+  // deco
+  decoItems.forEach(d => emoji(d.e, d.x, GROUND + 2, d.s));
+  // npcs and gates
+  for (let i = 0; i < 3; i++) {
+    const nx = NPC_X[i];
+    const bob = Math.sin(frame / 20 + i) * 2;
+    emoji(T.npcs[i].e, nx, GROUND + 2 + bob, 50);
+    if (!save.gates[i]) {
+      drawGate(nx + GATE_OFFSET);
+      if (mode === 'walk' && Math.abs(player.x - nx) < 100) bubble(nx, GROUND - 70, '💬');
+      else bubble(nx, GROUND - 70, '❗');
+    }
+  }
+  // end sign
+  const allOpen = save.gates.every(Boolean);
+  ctx.fillStyle = '#8d5524'; ctx.fillRect(END_X - 4, GROUND - 70, 8, 70);
+  ctx.fillStyle = allOpen ? '#ffd43b' : '#adb5bd'; ctx.fillRect(END_X - 40, GROUND - 90, 80, 34);
+  ctx.strokeStyle = '#333'; ctx.lineWidth = 3; ctx.strokeRect(END_X - 40, GROUND - 90, 80, 34);
+  emoji(allOpen ? '➡️🗺️' : '🔒', END_X, GROUND - 60, 22);
+  if (allOpen && mode === 'walk' && nearEnd()) bubble(END_X, GROUND - 100, '💬');
+  // poofs
+  poofs = poofs.filter(p => p.t < 40);
+  poofs.forEach(p => { p.t++; emoji('✨', p.x, GROUND - 20 - p.t, 30 + p.t / 2); });
+  // player
+  drawPup(player.x, player.y, player.face, player.onGround ? Math.floor(player.step / 6) % 2 : 0);
+  ctx.restore();
+}
+
+function bubble(x, y, e) {
+  emoji(e, x, y + Math.sin(frame / 15) * 3, 26);
+}
+
+function drawGate(x) {
+  ctx.fillStyle = '#a0522d';
+  for (let i = 0; i < 4; i++) ctx.fillRect(x - 24 + i * 14, GROUND - 60, 8, 60);
+  ctx.fillRect(x - 28, GROUND - 48, 56, 7);
+  ctx.fillRect(x - 28, GROUND - 22, 56, 7);
+  emoji('🔒', x, GROUND - 58, 24);
+}
+
+// simple pixel puppy, dino-game style
+function drawPup(x, y, face, step) {
+  ctx.save();
+  ctx.translate(x, y - 20);
+  ctx.scale(1.5, 1.5);
+  if (face < 0) { ctx.translate(34, 0); ctx.scale(-1, 1); }
+  const c = '#8d5524';
+  ctx.fillStyle = c;
+  ctx.fillRect(2, 14, 24, 16);      // body
+  ctx.fillRect(20, 2, 16, 16);      // head
+  ctx.fillRect(34, 10, 6, 6);       // nose
+  ctx.fillRect(-4, 10, 8, 4);       // tail
+  ctx.fillStyle = '#5c3a1a';
+  ctx.fillRect(20, 2, 6, 12);       // ear
+  ctx.fillStyle = '#fff'; ctx.fillRect(29, 6, 4, 4); // eye
+  ctx.fillStyle = '#222'; ctx.fillRect(31, 7, 2, 2);
+  ctx.fillStyle = '#e03131'; ctx.fillRect(18, 16, 10, 3); // red collar
+  ctx.fillStyle = c;
+  ctx.fillRect(4, 30, 6, step ? 10 : 6);
+  ctx.fillRect(18, 30, 6, step ? 6 : 10);
+  ctx.restore();
+}
+
+function loop() { update(); draw(); requestAnimationFrame(loop); }
+
+renderSlots();
+loop();
+</script>
+</body>
+</html>
