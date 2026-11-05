@@ -412,7 +412,7 @@ function enterTown() {
   player.x = save.x || 80; player.y = GROUND - player.h; player.vy = 0;
   decoItems = [];
   for (let x = 150; x < TOWN_W; x += rnd(160, 260)) {
-    if (NPC_X.some(n => Math.abs(n - x) < 110 || Math.abs(n + GATE_OFFSET - x) < 60) || Math.abs(END_X - x) < 90) continue;
+    if (NPC_X.some(n => Math.abs(n - x) < 110 || Math.abs(n + GATE_OFFSET - x) < 90) || Math.abs(END_X - x) < 90) continue;
     decoItems.push({ x, e: pick(T.deco), s: rnd(34, 54) });
   }
   clouds = Array.from({ length: 8 }, () => ({ x: rnd(0, TOWN_W), y: rnd(25, 90) }));
@@ -704,10 +704,12 @@ function update() {
   if (keys.ArrowRight) dx += 3.5;
   if (dx) { player.face = Math.sign(dx); player.step++; }
   let nx = Math.max(20, Math.min(TOWN_W - 60, player.x + dx));
-  // closed gates block the way
+  // the animal stands in front of its closed gate: Pip stops next to it to talk
   for (let i = 0; i < 3; i++) {
-    const gx = NPC_X[i] + GATE_OFFSET;
-    if (!save.gates[i] && player.x <= gx - 95 && nx > gx - 95) nx = gx - 95;
+    const stop = NPC_X[i] - 90;
+    if (!save.gates[i] && player.x <= stop && nx > stop) nx = stop;
+    const gx = NPC_X[i] + GATE_OFFSET - 95; // the gate itself also blocks (older saves may start past the animal)
+    if (!save.gates[i] && player.x <= gx && nx > gx) nx = gx;
   }
   player.x = nx;
   player.vy += 0.6;
