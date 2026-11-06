@@ -4,6 +4,11 @@
   "type": "module",
   "scripts": {
     "start": "node tools/dev-server.mjs",
-    "test": "node --test test/sim.test.mjs test/calibration.test.mjs"
+    "build": "node tools/build.mjs",
+    "test": "node --test test/sim.test.mjs test/calibration.test.mjs test/bundle.test.mjs"
+  },
+  "devDependencies": {
+    "esbuild": "0.28.2",
+    "three": "0.170.0"
   }
 }

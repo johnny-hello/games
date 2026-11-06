@@ -202,6 +202,17 @@ body.touchdrive #toast { top: auto; bottom: calc(max(14px, env(safe-area-inset-b
   </div>
 </div>
 
-<script type="module" src="./src/main.js"></script>
+<script>
+// Opened straight from disk (file://), browsers block module files, so use the
+// one-file bundle (rebuild it with `npm run build`). Served over http(s), load
+// the source modules directly so edits show up on reload.
+(function () {
+  var s = document.createElement('script');
+  if (location.protocol === 'file:') s.src = 'twin.bundle.js';
+  else { s.type = 'module'; s.src = './src/main.js'; }
+  s.onerror = function () { document.getElementById('loading').textContent = 'Could not load the warehouse.'; };
+  document.body.appendChild(s);
+})();
+</script>
 </body>
 </html>
