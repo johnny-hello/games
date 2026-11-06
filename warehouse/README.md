@@ -8,18 +8,34 @@ their VSLAM cameras.
 
 ## Run it
 
-The page uses JavaScript modules, so it needs a web server (opening
-`index.html` straight from disk will not work). From the repository folder:
+Open `index.html` (the games menu, or `warehouse/index.html`) straight from
+disk and click **Warehouse Twin**. No server is needed: opened from disk, the
+page runs `twin.bundle.js`, one file holding the whole app and Three.js, so it
+also works without internet.
+
+After changing `layout.js`, `assets.js` or anything in `src/`, rebuild that
+file, or the page opened from disk keeps showing the old version:
+
+```bash
+cd warehouse && npm install && npm run build
+```
+
+(`npm test` fails if the bundle is out of date.)
+
+For live mode, or to see edits without rebuilding, use the local server. From
+the repository folder:
 
 ```bash
 node warehouse/tools/dev-server.mjs
 ```
 
-Then open http://localhost:8080. GitHub Pages also works for the simulation.
+Then open http://localhost:8080. Served over http(s), including GitHub Pages,
+the page loads the source files directly, so edits show up on reload.
 
-The same server also sends a **fake VSLAM feed**. Open
+The server also sends a **fake VSLAM feed**. Open
 http://localhost:8080/?mode=live to see live mode working before real
-forklifts are connected.
+forklifts are connected. Live mode needs the server (or a real feed URL);
+it cannot connect from a page opened from disk.
 
 ## Controls
 
@@ -184,6 +200,7 @@ in meters.
 ```
 warehouse/
   index.html            page, styles and panels
+  twin.bundle.js        the whole app in one file, for opening from disk (built)
   layout.js             the warehouse layout (edit me)
   assets.js             3D models, colors, cameras (edit me)
   src/main.js           wires everything together
@@ -196,9 +213,10 @@ warehouse/
   src/controls.js       mouse, touch, keyboard
   src/ui.js             selection card, search, hints
   tools/dev-server.mjs  local server + fake VSLAM feed
+  tools/build.mjs       builds twin.bundle.js (npm run build)
   test/                 node --test warehouse/test/*.test.mjs
 ```
 
-The 3D library is [Three.js](https://threejs.org) 0.170, loaded from a CDN.
-If the factory network has no internet access, download it and point the
-`importmap` in `index.html` at the local copy.
+The 3D library is [Three.js](https://threejs.org) 0.170. The served version
+loads it from a CDN; `twin.bundle.js` has its own copy, so the page opened from
+disk works offline.
