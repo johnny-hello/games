@@ -29,8 +29,11 @@ function run(seconds, setup) {
 
 test('layout builds slots, docks and a usable route grid', () => {
   const m = buildModel(layout);
-  assert.equal(m.slots.filter(s => s.kind === 'rack').length, 6 * 14 * 2 * 3);
-  assert.equal(m.docks.length, 6);
+  const perRow = layout.rackRows.map(r => { const k = { ...layout.rackDefaults, ...r }; return k.bays * k.perBay * k.levels; });
+  assert.equal(m.slots.filter(s => s.kind === 'rack').length, perRow.reduce((a, b) => a + b, 0));
+  assert.equal(m.docks.length, layout.docks.doors.length);
+  assert.ok(m.aisles.length > 0, 'found the aisles between rack rows');
+  for (const h of m.homes.values()) assert.ok(m.grid.clear[m.grid.idx(...m.grid.cellOf(h.x, h.y))] > 0, 'home pose is on the floor');
   for (const s of m.slots) {
     const [i, j] = m.grid.cellOf(s.pre[0], s.pre[1]);
     assert.ok(m.grid.clear[m.grid.idx(i, j)] >= 1.7, `room to turn in front of ${s.id}`);
@@ -51,10 +54,12 @@ test('autopilot forklifts never overlap and keep working (20 simulated minutes)'
 
 test('a manually driven forklift blocks traffic but nobody overlaps it', () => {
   const { sim, minGap } = run(6 * 60, sim => {
-    // Park FL-01 in the middle of the cross aisle in front of the racks.
+    // Park FL-01 in the middle of the main aisle between the racks and the
+    // dock lanes, in front of the busiest docks.
     const f = sim.forklift('FL-01');
     sim.takeControl('FL-01');
-    f.x = 30; f.y = 22; f.heading = 0;
+    const lane = sim.m.docks[2].lane, racksSouth = Math.max(...sim.m.racks.map(r => r.y0 + r.h));
+    f.x = lane.cx; f.y = (racksSouth + lane.cy - lane.hy) / 2; f.heading = 0;
   });
   assert.ok(minGap >= 2 * FORKLIFT.margin - 0.01, `forklifts came within ${minGap} m`);
   assert.ok(sim.stats.putaways + sim.stats.picks > 6);
@@ -65,11 +70,10 @@ test('manual pick and drop', () => {
   const sim = new Sim(m);
   const f = sim.forklift('FL-04');
   sim.takeControl(f.id);
-  const slot = m.slots.find(s => s.kind === 'rack' && s.pallet && s.level === 1 && s.rack === 'F');
+  const slot = m.slots.find(s => s.kind === 'rack' && s.pallet && s.level === 1 && s.rack === m.racks[m.racks.length - 1].id);
   // Put the forklift a little off the engage pose, facing the rack.
   f.x = slot.engage[0] - 0.2 * Math.cos(slot.heading); f.y = slot.engage[1] - 0.2 * Math.sin(slot.heading);
   f.heading = slot.heading + 0.1;
-  for (const o of sim.forklifts) if (o !== f) { o.x = 2.65; } // keep others home
   f.fork = slot.z;
   assert.equal(sim.slotInFront(f)?.id, slot.id);
   const pid = slot.pallet;

@@ -2,7 +2,7 @@
 // pallet slots, rack boxes, solid obstacles and the route grid.
 // Pure JavaScript (no Three.js), so it also runs in Node tests.
 
-import { Grid, obb, DEG, clamp } from './geometry.js';
+import { Grid, obb, poseBox, overlaps, DEG, clamp, pointInPolygon, polygonArea } from './geometry.js';
 
 // Forklift footprint, measured from the forklift's reference point (meters).
 // The box runs from `back` (counterweight) to `front` (fork tips / pallet).
@@ -24,23 +24,32 @@ const ACCESS = {
 };
 
 export function buildModel(layout) {
-  const W = layout.building.width, D = layout.building.depth;
+  // The floor outline: building.outline (a list of [x, y] corners), or a
+  // plain rectangle building.width x building.depth.
+  const B = layout.building;
+  const outline = B.outline ? B.outline.map(p => [p[0], p[1]]) : [[0, 0], [B.width, 0], [B.width, B.depth], [0, B.depth]];
+  if (polygonArea(outline) < 0) outline.reverse(); // make it run clockwise
+  const W = Math.max(...outline.map(p => p[0])), D = Math.max(...outline.map(p => p[1]));
   const model = {
-    layout, W, D,
+    layout, W, D, outline,
     slots: [], slotById: new Map(),
-    racks: [], docks: [], chargers: [], obstacles: [],
+    racks: [], docks: [], chargers: [], obstacles: [], columns: [], doors: [],
     walls: [], staticBoxes: [], homes: new Map(),
     skus: layout.skus, skuById: new Map(layout.skus.map(s => [s.id, s])),
   };
+  const onFloor = (x, y) => pointInPolygon(outline, x, y);
 
-  // Walls, as thin boxes just outside the floor.
+  // Walls: one thin box just outside each edge of the outline.
   const t = 0.25;
-  model.walls = [
-    { side: 'north', box: obb(W / 2, -t / 2, W / 2 + t, t / 2) },
-    { side: 'south', box: obb(W / 2, D + t / 2, W / 2 + t, t / 2) },
-    { side: 'west', box: obb(-t / 2, D / 2, t / 2, D / 2 + t) },
-    { side: 'east', box: obb(W + t / 2, D / 2, t / 2, D / 2 + t) },
-  ];
+  for (let i = 0; i < outline.length; i++) {
+    const a = outline[i], b = outline[(i + 1) % outline.length];
+    const len = Math.hypot(b[0] - a[0], b[1] - a[1]);
+    if (len < 1e-6) continue;
+    const ux = (b[0] - a[0]) / len, uy = (b[1] - a[1]) / len;
+    const nx = uy, ny = -ux; // outward for a clockwise outline (y down)
+    const box = obb((a[0] + b[0]) / 2 + nx * t / 2, (a[1] + b[1]) / 2 + ny * t / 2, len / 2 + t, t / 2, Math.atan2(uy, ux));
+    model.walls.push({ a, b, len, nx, ny, box });
+  }
   model.staticBoxes.push(...model.walls.map(w => w.box));
 
   // Rack rows and their slots.
@@ -106,12 +115,46 @@ export function buildModel(layout) {
     model.staticBoxes.push(box);
   }
 
+  // Building columns on a regular grid. Columns inside or right next to a
+  // rack row, office, charger, dock lane or wall are left out: real racks are
+  // built around the columns, so they would be hidden in the rack anyway.
+  const cg = layout.columns;
+  if (cg) {
+    const r = (cg.size || 0.45) / 2;
+    const parked = [...model.homes.values()].map(h => poseBox(h.x, h.y, h.heading, FORKLIFT.back, FORKLIFT.front, FORKLIFT.halfWidth, 0.3));
+    const near = model.racks.map(k => k.box).concat(model.obstacles.map(o => o.box), model.chargers.map(c => c.box), model.docks.map(d => d.lane), parked);
+    for (const cy of cg.ys) {
+      for (let cx = cg.x0; cx < W; cx += cg.dx) {
+        const box = obb(cx, cy, r, r);
+        const grown = obb(cx, cy, r + 0.6, r + 0.6);
+        const corners = [[-1, -1], [1, -1], [1, 1], [-1, 1]].map(([sx, sy]) => [cx + sx * (r + 1), cy + sy * (r + 1)]);
+        if (!corners.every(([x, y]) => onFloor(x, y))) continue;
+        if (near.some(b => overlaps(grown, b))) continue;
+        model.columns.push({ x: cx, y: cy, box });
+        model.staticBoxes.push(box);
+      }
+    }
+  }
+
+  // Other doors (grade-level and rail doors): drawn on the nearest wall, not
+  // used by the simulation.
+  for (const d of layout.doors || []) {
+    let best = null;
+    for (const w of model.walls) {
+      const dx = w.b[0] - w.a[0], dy = w.b[1] - w.a[1];
+      const k = clamp(((d.x - w.a[0]) * dx + (d.y - w.a[1]) * dy) / (w.len * w.len), 0, 1);
+      const px = w.a[0] + dx * k, py = w.a[1] + dy * k, e = Math.hypot(px - d.x, py - d.y);
+      if (!best || e < best.e) best = { e, x: px, y: py, wall: w };
+    }
+    if (best) model.doors.push({ ...d, x: best.x, y: best.y, nx: best.wall.nx, ny: best.wall.ny });
+  }
+
   // Aisles between rack rows. Only one autopilot forklift works inside an
   // aisle at a time (others wait at the entrance), because two forklifts in a
   // narrow aisle cannot turn around or pass each other.
   model.aisles = [];
   const solid = model.staticBoxes;
-  const inside = (x, y) => x < 0 || y < 0 || x > W || y > D || solid.some(b => pointIn(b, x, y));
+  const inside = (x, y) => !onFloor(x, y) || solid.some(b => pointIn(b, x, y));
   for (const r of model.racks) {
     const a = ACCESS[r.access], alongX = r.dir !== 'y';
     const faceC = alongX ? (a[1] > 0 ? r.y0 + r.h : r.y0) : (a[0] > 0 ? r.x0 + r.w : r.x0);
@@ -135,6 +178,7 @@ export function buildModel(layout) {
   // to pick or drop, never to drive through).
   const grid = new Grid(W, D, 0.5);
   grid.blockEdges();
+  grid.blockOutside(outline);
   for (const b of model.staticBoxes) grid.blockBox(b);
   for (const d of model.docks) grid.blockBox(d.lane);
   grid.computeClearance();
