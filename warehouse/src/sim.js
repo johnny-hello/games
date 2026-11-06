@@ -217,7 +217,7 @@ export class Sim {
       if (!f.steps.length) { this.drive(f, dt, 0, 0, false); f.status = f.atHome ? 'Parked at charger' : 'Idle'; return; }
     }
     // Watchdog: a task that has been stuck for a long time is dropped.
-    if (f.task && f.taskT > 120) this.abortTask(f, 'Task took too long');
+    if (f.task && f.taskT > (f.taskLimit || 120)) this.abortTask(f, 'Task took too long');
     const st = f.steps[0];
     if (!st) return;
     f.stepT += dt;
@@ -479,7 +479,13 @@ export class Sim {
     const free = s => !s.claim;
     const rackEmpty = m.slots.filter(s => s.kind === 'rack' && !s.pallet && free(s) && s.z + 0.2 <= FL.maxLift);
     const pickRandom = arr => arr[Math.floor(R() * arr.length)];
-    const nearest = (arr) => arr.reduce((b, s) => (!b || dist(f.x, f.y, s.pre[0], s.pre[1]) < dist(f.x, f.y, b.pre[0], b.pre[1]) ? s : b), null);
+    const nearest = (arr, x = f.x, y = f.y) => arr.reduce((b, s) => (!b || dist(x, y, s.pre[0], s.pre[1]) < dist(x, y, b.pre[0], b.pre[1]) ? s : b), null);
+    // A random one of the `n` slots nearest to (x, y): keeps trips in a long
+    // building reasonable while still spreading pallets around.
+    const nearRandom = (arr, x, y, n = 40) => pickRandom(arr.map(s => [dist(x, y, s.pre[0], s.pre[1]), s]).sort((a, b) => a[0] - b[0]).slice(0, n).map(e => e[1]));
+    // Time allowed before the watchdog drops the task: 2 minutes plus the
+    // driving, at about 1 m/s (routes go around racks and wait for traffic).
+    const limit = (...pts) => { let d = 0; for (let k = 1; k < pts.length; k++) d += dist(pts[k - 1][0], pts[k - 1][1], pts[k][0], pts[k][1]); return 120 + d; };
 
     if (f.carrying) {
       const to = nearest(rackEmpty);
@@ -487,7 +493,7 @@ export class Sim {
       to.claim = f.id;
       f.task = { kind: 'putaway', to: to.id };
       f.steps = [{ op: 'fork', h: FL.carryHeight }, ...this.dropSteps(to), { op: 'done' }];
-      f.taskT = 0;
+      f.taskT = 0; f.taskLimit = limit([f.x, f.y], to.pre);
       return;
     }
     const inbound = m.slots.filter(s => s.dockKind === 'inbound' && s.pallet && free(s));
@@ -497,8 +503,8 @@ export class Sim {
     let from = null, to = null, kind = null;
     const canPick = outEmpty.length && rackFull.length;
     const wantPutaway = inbound.length && rackEmpty.length && (!canPick || inbound.length >= 7 || R() < 0.5);
-    if (wantPutaway) { kind = 'putaway'; from = nearest(inbound); to = pickRandom(rackEmpty); }
-    else if (outEmpty.length && rackFull.length) { kind = 'pick'; from = pickRandom(rackFull); to = pickRandom(outEmpty); }
+    if (wantPutaway) { kind = 'putaway'; from = nearest(inbound); to = nearRandom(rackEmpty, from.x, from.y); }
+    else if (outEmpty.length && rackFull.length) { kind = 'pick'; to = pickRandom(outEmpty); from = nearRandom(rackFull, to.x, to.y); }
 
     if (!from || !to) {
       const h = m.homes.get(f.id);
@@ -515,7 +521,7 @@ export class Sim {
     from.claim = f.id; to.claim = f.id;
     f.msg = '';
     f.task = { kind, from: from.id, to: to.id, pallet: from.pallet };
-    f.taskT = 0;
+    f.taskT = 0; f.taskLimit = limit([f.x, f.y], from.pre, to.pre);
     f.steps = [...this.pickSteps(from, f), ...this.dropSteps(to), { op: 'done' }];
   }
 

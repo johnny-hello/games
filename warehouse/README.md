@@ -90,25 +90,43 @@ still wait close to a minute before the traffic clears.
 
 Everything is built from **`layout.js`**, in meters. Coordinates work like a
 floor plan: x to the east, y to the south, with (0, 0) at the north-west
-inside corner.
+corner.
 
-- `building` sets the size and wall height.
+The layout is **HL Uriman's space at 33201 Dowe Ave, Union City**, traced
+from the site plan in the building's CBRE sale flyer. The space is about
+259 m × 51 m (168 ft deep, 611.5 ft of dock wall), with a curved west end
+along the rail spur. The outline, the 19 dock doors, 4 grade-level doors,
+9 rail doors and the two-story office come from that plan. **The rack rows,
+chargers and exact column positions are guesses** until the floor is
+measured or scanned.
+
+- `building.outline` is the inside of the outer walls, corner by corner
+  (a curve is a run of short straight pieces). For a plain rectangle use
+  `building: { width, depth }` instead. `wallHeight` sets the wall height.
 - `rackRows` are rack rows. Each has its start (x, y), whether it runs east
   (`dir: 'x'`) or south (`'y'`), and the side forklifts work from
   (`access`). Bays, bay width, depth, levels and level height default from
-  `rackDefaults`.
+  `rackDefaults`. In this file the rows are generated from a few numbers
+  (`pairCenters` and `blocks`) at the top.
 - `docks` are the dock doors on the south wall, each with a staging lane
   (`inbound` or `outbound`).
+- `doors` are other doors (grade-level and rail). They are drawn on the
+  nearest wall and are not used by the simulation.
+- `columns` is the building's column grid. Columns in or right next to a
+  rack, office, charger or dock lane are left out.
 - `chargers` are where idle forklifts park.
-- `obstacles` are offices, columns or anything else to drive around.
+- `obstacles` are offices or anything else to drive around (`floors: 2`
+  for a two-story office).
+- `site` is what is drawn around the building: truck court, the other
+  tenant's part of the building, the rail spur, Dowe Ave and parking.
 - `forklifts`, `skus` and `initialFill` set up the simulation.
 
-Aisles, routes, slot names (like `B-07-2a` = row B, bay 7, level 2, position
-a) and floor markings all follow from this file. **The numbers in it now are
-placeholders.** Replace them with the real factory dimensions.
+Aisles, routes, slot names (like `B2-07-2a` = row B, block 2, bay 7,
+level 2, position a) and floor markings all follow from this file.
 
-> Keep the real factory's layout and data out of a public repository. Once
-> real data goes in, move this folder to a private repo.
+> The outline comes from a public sale flyer. Keep anything that is not
+> public (the real rack layout, live forklift data, VSLAM feed addresses)
+> out of a public repository: move this folder to a private repo first.
 
 ## Change the 3D models
 

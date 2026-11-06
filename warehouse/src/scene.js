@@ -8,6 +8,7 @@ import {
   COLORS, CAMERAS, mat, box, cyl, makeForklift, setForkHeight, palletGeometries, makeTruck, makeTree, makeCar,
 } from '../assets.js';
 import { FORKLIFT as FL, PALLET } from './model.js';
+import { pointInPolygon } from './geometry.js';
 
 const EL = Math.atan(1 / Math.SQRT2); // true isometric camera elevation (35.26°)
 const TAU = Math.PI * 2;
@@ -41,10 +42,11 @@ export class WarehouseScene {
     this.cam = new THREE.OrthographicCamera(-1, 1, 1, -1, -500, 1000);
     const W = model.W, D = model.D;
     this.view = {
-      target: new THREE.Vector3(W / 2, 0, D / 2 + 3), targetT: new THREE.Vector3(W / 2, 0, D / 2 + 3),
+      target: new THREE.Vector3(W / 2, 0, D / 2 + 2), targetT: new THREE.Vector3(W / 2, 0, D / 2 + 2),
       az: Math.PI / 4, azT: Math.PI / 4, zoom: 1, zoomT: 1, size: 46,
     };
     this.home = { target: this.view.target.clone(), az: this.view.az, zoom: 1 };
+    this.minZoom = 0.45;
 
     this.forklifts = new Map();
     this.selected = null;
@@ -70,6 +72,27 @@ export class WarehouseScene {
     const s = this.view.size;
     Object.assign(this.cam, { left: -s * a / 2, right: s * a / 2, top: s / 2, bottom: -s / 2 });
     this.cam.updateProjectionMatrix();
+    // The home view shows the whole building; a small one is shown at zoom 1.
+    const first = !this.fitted;
+    this.fitted = true;
+    this.home.zoom = Math.min(1, this.fitZoom(a));
+    this.minZoom = Math.min(0.45, this.home.zoom * 0.8);
+    if (first) this.view.zoom = this.view.zoomT = this.home.zoom;
+  }
+
+  // Zoom at which the whole building fits on screen in the home view.
+  fitZoom(aspect) {
+    const az = this.home.az, t = this.home.target, H = this.m.layout.building.wallHeight;
+    const rx = Math.cos(az), rz = -Math.sin(az), fx = -Math.sin(az), fz = -Math.cos(az);
+    let sx = 0, sy = 0;
+    for (const [x, y] of this.m.outline) {
+      const dx = x - t.x, dz = y - t.z;
+      sx = Math.max(sx, Math.abs(dx * rx + dz * rz));
+      const up = (dx * fx + dz * fz) * Math.sin(EL);
+      sy = Math.max(sy, Math.abs(up), Math.abs(up + H * Math.cos(EL)));
+    }
+    const s = this.view.size;
+    return 0.94 * Math.min((s * aspect) / (2 * sx), s / (2 * sy));
   }
 
   placeCamera(dt) {
@@ -83,8 +106,8 @@ export class WarehouseScene {
     this.cam.zoom = v.zoom;
     this.cam.updateProjectionMatrix();
     // Shadows follow the part of the warehouse in view.
-    const span = Math.min(75, Math.max(22, v.size / v.zoom * 0.95));
-    Object.assign(this.sun.shadow.camera, { left: -span, right: span, top: span, bottom: -span, near: 1, far: 220 });
+    const span = Math.min(150, Math.max(22, v.size / v.zoom * 0.95));
+    Object.assign(this.sun.shadow.camera, { left: -span, right: span, top: span, bottom: -span, near: 1, far: 320 });
     this.sun.shadow.camera.updateProjectionMatrix();
     this.sun.position.set(t.x - 30, 70, t.z + 40);
     this.sun.target.position.copy(t);
@@ -109,7 +132,7 @@ export class WarehouseScene {
   }
   zoomBy(f, px, py) {
     const v = this.view, before = this.floorPoint(px, py);
-    v.zoomT = Math.min(6, Math.max(0.45, v.zoomT * f));
+    v.zoomT = Math.min(6, Math.max(this.minZoom, v.zoomT * f));
     if (before && px != null) {
       // Keep the point under the cursor in place.
       const ratio = 1 - 1 / f;
@@ -124,8 +147,8 @@ export class WarehouseScene {
   focus(x, y, zoom) { this.view.targetT.set(x, 0, y); if (zoom) this.view.zoomT = Math.max(this.view.zoomT, zoom); }
   clampTarget() {
     const t = this.view.targetT;
-    t.x = Math.min(this.m.W + 25, Math.max(-25, t.x));
-    t.z = Math.min(this.m.D + 30, Math.max(-25, t.z));
+    t.x = Math.min(this.m.W + 40, Math.max(-40, t.x));
+    t.z = Math.min(this.m.D + 60, Math.max(-40, t.z));
   }
 
   ndc(px, py) {
@@ -160,41 +183,50 @@ export class WarehouseScene {
   // ----------------------------------------------------------- static build
 
   buildStatic() {
-    const m = this.m, L = m.layout, W = m.W, D = m.D, C = COLORS, world = this.world;
+    const m = this.m, L = m.layout, W = m.W, D = m.D, C = COLORS;
     const batch = new Batch();
-
-    // Ground, truck yard, road.
-    plane(world, 400, 400, C.ground, W / 2, -0.02, D / 2);
-    plane(world, W + 30, 22, C.yard, W / 2, -0.01, D + 11);
-    plane(world, W + 120, 9, C.road, W / 2, -0.005, D + 26.5);
-    for (let x = -50; x < W + 60; x += 6) batch.add('#ffffff', 3, 0.01, 0.18, x, 0.002, D + 26.5, false);
-    plane(world, W + 120, 1.4, '#e9edf4', W / 2, 0.0, D + 21.4);
-    // Building floor.
-    plane(world, W, D, C.floor, W / 2, 0.005, D / 2);
-
-    // Walls (one group per side so the ones facing the camera can be hidden).
-    this.walls = [];
+    // Static models (trucks, docks, office, trees...) go into `world` first and
+    // are merged into one mesh per material at the end: far fewer draw calls.
+    const world = new THREE.Group();
+    this.decor = world;
     const H = L.building.wallHeight, t = 0.25;
     const doorW = L.docks.doorWidth;
-    const wall = (side, nx, nz, segs) => {
+
+    // Ground, the site around the building, and the building floor.
+    plane(this.world, W + 700, D + 600, C.ground, W / 2, -0.03, D / 2);
+    this.buildSite(batch);
+    const shape = new THREE.Shape(m.outline.map(([x, y]) => new THREE.Vector2(x, -y)));
+    const floor = new THREE.Mesh(new THREE.ShapeGeometry(shape).rotateX(-Math.PI / 2), mat(C.floor, { side: THREE.DoubleSide }));
+    floor.position.y = 0.005; floor.receiveShadow = true;
+    this.world.add(floor);
+
+    // Walls: one group per edge of the outline, so the ones between the
+    // camera and the inside of the building can be hidden. Dock doors cut
+    // openings into the wall they sit on.
+    this.walls = [];
+    for (const w of m.walls) {
       const g = new THREE.Group();
-      for (const [x0, z0, x1, z1] of segs) {
-        const len = Math.hypot(x1 - x0, z1 - z0), cx = (x0 + x1) / 2, cz = (z0 + z1) / 2;
-        const alongX = Math.abs(x1 - x0) > Math.abs(z1 - z0);
-        box(g, alongX ? len : t, H, alongX ? t : len, C.wall, cx, H / 2, cz);
-        box(g, alongX ? len : t + 0.06, 0.22, alongX ? t + 0.06 : len, C.wallTrim, cx, H + 0.11, cz);
+      const ux = (w.b[0] - w.a[0]) / w.len, uy = (w.b[1] - w.a[1]) / w.len;
+      const gaps = [];
+      for (const d of m.docks) {
+        const k = (d.x - w.a[0]) * ux + (D - w.a[1]) * uy;
+        const off = Math.abs((d.x - w.a[0]) * uy - (D - w.a[1]) * ux);
+        if (off < 0.3 && k > 0 && k < w.len) gaps.push([k - doorW / 2 - 0.2, k + doorW / 2 + 0.2]);
       }
-      world.add(g);
-      this.walls.push({ side, nx, nz, group: g });
-    };
-    wall('north', 0, -1, [[-t, -t / 2, W + t, -t / 2]]);
-    wall('west', -1, 0, [[-t / 2, 0, -t / 2, D]]);
-    wall('east', 1, 0, [[W + t / 2, 0, W + t / 2, D]]);
-    const doors = m.docks.map(d => d.x).sort((a, b) => a - b);
-    const southSegs = []; let x = -t;
-    for (const dx of doors) { southSegs.push([x, D + t / 2, dx - doorW / 2 - 0.2, D + t / 2]); x = dx + doorW / 2 + 0.2; }
-    southSegs.push([x, D + t / 2, W + t, D + t / 2]);
-    wall('south', 0, 1, southSegs);
+      gaps.sort((p, q) => p[0] - q[0]);
+      const pieces = []; let s0 = -t / 2;
+      for (const [g0, g1] of gaps) { pieces.push([s0, g0]); s0 = g1; }
+      pieces.push([s0, w.len + t / 2]);
+      const ang = Math.atan2(uy, ux);
+      for (const [p0, p1] of pieces) {
+        if (p1 - p0 < 0.01) continue;
+        const mid = (p0 + p1) / 2, cx = w.a[0] + ux * mid + w.nx * t / 2, cz = w.a[1] + uy * mid + w.ny * t / 2;
+        box(g, p1 - p0, H, t, C.wall, cx, H / 2, cz).rotation.y = -ang;
+        box(g, p1 - p0, 0.22, t + 0.06, C.wallTrim, cx, H + 0.11, cz).rotation.y = -ang;
+      }
+      this.world.add(g);
+      this.walls.push({ nx: w.nx, nz: w.ny, group: g });
+    }
 
     // Dock doors, frames, levelers and trucks.
     m.docks.forEach((d, i) => {
@@ -202,13 +234,18 @@ export class WarehouseScene {
       box(g, 0.35, 3.9, 0.5, C.dockFrame, -doorW / 2 - 0.18, 1.95, 0);
       box(g, 0.35, 3.9, 0.5, C.dockFrame, doorW / 2 + 0.18, 1.95, 0);
       box(g, doorW + 0.7, 0.5, 0.55, C.dockFrame, 0, 3.85, 0);
-      const door = box(g, doorW, 0.9, 0.12, C.dockDoor, 0, 3.15, -0.05);
+      box(g, doorW, 0.9, 0.12, C.dockDoor, 0, 3.15, -0.05);
       for (let k = 0; k < 3; k++) box(g, doorW, 0.02, 0.13, '#aeb8c8', 0, 2.8 + k * 0.25, -0.05, false);
-      void door;
       box(g, doorW - 0.2, 0.08, 1.8, '#b9c3d2', 0, 0.04, 1.1);               // leveler outside
       for (const s of [-1, 1]) box(g, 0.25, 0.35, 0.18, '#2f3a4c', s * (doorW / 2 - 0.35), 1.1, 0.35); // bumpers
       const lamp = new THREE.Mesh(new THREE.BoxGeometry(0.14, 0.14, 0.06), new THREE.MeshStandardMaterial({ color: d.kind === 'inbound' ? '#3ccf7d' : '#f2a72b', emissive: d.kind === 'inbound' ? '#2ab36a' : '#e08d12', emissiveIntensity: 0.6 }));
       lamp.position.set(doorW / 2 + 0.55, 2.6, -0.3); g.add(lamp);
+      // Wall above the door opening, hidden together with the dock wall.
+      if (H > 4.1) {
+        const above = box(world, doorW + 0.4, H - 4.1, t, C.wall, d.x, 4.1 + (H - 4.1) / 2, D + t / 2);
+        const south = this.walls.find(w => w.nz > 0.99 && Math.abs(w.nx) < 0.01);
+        if (south) south.group.add(above);
+      }
       // Painted lane, labels.
       const lane = d.lane;
       outline(batch, C.floorLine, lane.cx, lane.cy, lane.hx + 0.1, lane.hy + 0.1, 0.07);
@@ -216,15 +253,26 @@ export class WarehouseScene {
       floorText(world, d.kind === 'inbound' ? 'IN' : 'OUT', d.x, D - 7.0, 1.6, 0.8, { color: d.kind === 'inbound' ? '#2fa36b' : '#d98b1a' });
       // Trucks at most doors (static for now).
       if (i % 3 !== 2) {
-        const tr = makeTruck(i < 3 ? COLORS.truckStripe : '#5b7cf0');
+        const tr = makeTruck(d.kind === 'inbound' ? COLORS.truckStripe : '#5b7cf0');
         tr.position.set(d.x, 0, D + 0.6 + 6.35);
         tr.rotation.y = -Math.PI / 2;
         world.add(tr);
       }
       // Truck bay lines on the yard.
-      batch.add(C.floorLine, 0.12, 0.01, 13, d.x - 1.9, 0.004, D + 7, false);
-      batch.add(C.floorLine, 0.12, 0.01, 13, d.x + 1.9, 0.004, D + 7, false);
+      const half = Math.min(1.9, (L.docks.doorWidth + 1) / 2);
+      batch.add(C.floorLine, 0.12, 0.01, 13, d.x - half, 0.004, D + 7, false);
+      batch.add(C.floorLine, 0.12, 0.01, 13, d.x + half, 0.004, D + 7, false);
     });
+
+    // Grade-level and rail doors.
+    for (const d of m.doors) this.buildDoor(d, H, t);
+
+    // Building columns: steel with a yellow guard at the bottom.
+    for (const c of m.columns) {
+      batch.add('#9aa6b8', 0.32, H, 0.32, c.x, H / 2, c.y);
+      batch.add('#f2c230', 0.6, 1.1, 0.6, c.x, 0.55, c.y);
+      batch.add('#2f3a4c', 0.62, 0.12, 0.62, c.x, 0.85, c.y, false);
+    }
 
     // Rack rows.
     for (const r of m.racks) this.buildRack(batch, r);
@@ -243,12 +291,14 @@ export class WarehouseScene {
       }
     }
 
-    // Chargers.
+    // Chargers, with a painted zone around them and the parked forklifts.
     if (m.chargers.length) {
-      const ys = m.chargers.map(c => c.y), xs = m.chargers.map(c => c.x);
-      const x0 = Math.min(...xs) - 0.4, x1 = Math.max(...xs) + 4.6, y0 = Math.min(...ys) - 1.6, y1 = Math.max(...ys) + 1.6;
+      const xs = [], ys = [];
+      for (const c of m.chargers) { xs.push(c.x); ys.push(c.y); }
+      for (const h of m.homes.values()) for (const r of [FL.back, FL.front]) { xs.push(h.x + Math.cos(h.heading) * r); ys.push(h.y + Math.sin(h.heading) * r); }
+      const x0 = Math.min(...xs) - 0.5, x1 = Math.max(...xs) + 0.5, y0 = Math.min(...ys) - 1.1, y1 = Math.max(...ys) + 1.1;
       outline(batch, C.chargeZone, (x0 + x1) / 2, (y0 + y1) / 2, (x1 - x0) / 2, (y1 - y0) / 2, 0.09);
-      floorText(world, 'CHARGING', (x0 + x1) / 2 + 0.5, y0 - 1.0, 3.6, 0.8, { color: '#2fa36b' });
+      floorText(world, 'CHARGING', (x0 + x1) / 2, y0 - 1.0, 3.6, 0.8, { color: '#2fa36b' });
     }
     for (const c of m.chargers) {
       const g = new THREE.Group(); g.position.set(c.x, 0, c.y); g.rotation.y = -(c.heading || 0) * Math.PI / 180; world.add(g);
@@ -260,42 +310,121 @@ export class WarehouseScene {
     // Offices and other blocks.
     for (const o of m.obstacles) {
       const g = new THREE.Group(); g.position.set(o.x + o.w / 2, 0, o.y + o.h / 2); world.add(g);
-      const h = 3.2;
+      const floors = o.floors || 1, h = 3.2 * floors;
       box(g, o.w, h, o.h, C.office, 0, h / 2, 0);
       box(g, o.w + 0.1, 0.2, o.h + 0.1, C.wallTrim, 0, h + 0.1, 0);
       const glass = mat(C.officeGlass, { emissive: '#9fc0f2', emissiveIntensity: 0.15 });
-      for (let k = 0; k < Math.floor(o.w / 1.6); k++) {
-        box(g, 1.1, 1.2, 0.05, glass, -o.w / 2 + 0.9 + k * 1.6, 1.9, -o.h / 2 - 0.02, false);
-        box(g, 1.1, 1.2, 0.05, glass, -o.w / 2 + 0.9 + k * 1.6, 1.9, o.h / 2 + 0.02, false);
+      for (let f = 0; f < floors; f++) {
+        const y = 1.9 + f * 3.2;
+        for (let k = 0; k < Math.floor(o.w / 1.6); k++) {
+          box(g, 1.1, 1.2, 0.05, glass, -o.w / 2 + 0.9 + k * 1.6, y, -o.h / 2 - 0.02, false);
+          box(g, 1.1, 1.2, 0.05, glass, -o.w / 2 + 0.9 + k * 1.6, y, o.h / 2 + 0.02, false);
+        }
+        for (let k = 0; k < Math.floor(o.h / 1.6); k++) {
+          box(g, 0.05, 1.2, 1.1, glass, -o.w / 2 - 0.02, y, -o.h / 2 + 0.9 + k * 1.6, false);
+          box(g, 0.05, 1.2, 1.1, glass, o.w / 2 + 0.02, y, -o.h / 2 + 0.9 + k * 1.6, false);
+        }
       }
-      for (let k = 0; k < Math.floor(o.h / 1.6); k++) box(g, 0.05, 1.2, 1.1, glass, -o.w / 2 - 0.02, 1.9, -o.h / 2 + 0.9 + k * 1.6, false);
       floorText(world, (o.kind || o.id).toUpperCase(), o.x + o.w / 2, o.y - 0.9, 3.2, 0.8);
     }
 
-    // Trees and parked cars around the site.
+    batch.build(this.world);
+    freeze(world, this.world);
+    for (const w of this.walls) { const parts = new THREE.Group(); parts.add(...w.group.children); freeze(parts, w.group); }
+  }
+
+  // A grade-level (drive-in) or rail door, drawn on its wall.
+  buildDoor(d, H, t) {
+    const rail = d.kind === 'rail';
+    const w = 3.7, h = rail ? 4.9 : 4.3;
+    const g = new THREE.Group();
+    g.position.set(d.x + d.nx * t / 2, 0, d.y + d.ny * t / 2);
+    g.rotation.y = -Math.atan2(d.nx, -d.ny);   // local x along the wall, local -z outward
+    box(g, w + 0.5, h + 0.35, t + 0.1, COLORS.dockFrame, 0, (h + 0.35) / 2, 0);
+    box(g, w, h, t + 0.16, rail ? '#c9d3e2' : COLORS.dockDoor, 0, h / 2, 0);
+    for (let k = 1; k < 7; k++) box(g, w, 0.03, t + 0.18, '#aeb8c8', 0, (h * k) / 7, 0, false);
+    for (const s of [-1, 1]) box(g, 0.22, 1.1, 0.22, '#f2c230', s * (w / 2 + 0.6), 0.55, -t / 2 - 0.5); // bollards outside
+    // Hide it together with the wall it is on.
+    const wall = this.walls.find(x => Math.abs(x.nx - d.nx) < 0.01 && Math.abs(x.nz - d.ny) < 0.01 && x.group.children.length);
+    (wall ? wall.group : this.world).add(g);
+    floorText(this.world, d.id, d.x - d.nx * 2.2, d.y - d.ny * 2.2, 2.2, 1.1, { color: '#8d9bb3' });
+  }
+
+  // Everything outside the building: yard, neighbors, rail, road, parking,
+  // trees. From layout.site, or a simple truck yard and road if it is missing.
+  buildSite(batch) {
+    const m = this.m, L = m.layout, W = m.W, D = m.D, C = COLORS, world = this.decor;
+    const site = L.site || {};
     const rnd = mulberry(5);
-    const treeAt = (x, z, s) => { const tr = makeTree(s); tr.position.set(x, 0, z); world.add(tr); };
-    for (let x = -6; x < W + 8; x += 7 + rnd() * 4) treeAt(x, -6 - rnd() * 3, 0.9 + rnd() * 0.4);
-    for (let z = 2; z < D + 20; z += 6 + rnd() * 4) treeAt(-9 - rnd() * 3, z, 0.9 + rnd() * 0.4);
-    for (let z = -2; z < D + 18; z += 7 + rnd() * 4) treeAt(W + 8 + rnd() * 3, z, 0.9 + rnd() * 0.4);
-    for (let x = -10; x < W + 12; x += 8 + rnd() * 5) treeAt(x, D + 33 + rnd() * 2, 0.9 + rnd() * 0.4);
-    const carColors = ['#f26d5b', '#5b7cf0', '#9b7cf0', '#ffffff', '#2cc3b5', '#f2c230'];
-    plane(world, 12, 20, C.yard, -20, -0.005, D - 6);
-    for (let k = 0; k < 7; k++) {
-      const c = makeCar(carColors[k % carColors.length]);
-      c.position.set(-23 + (k % 2) * 6, 0, D - 15 + Math.floor(k / 2) * 3.2 + (k % 2) * 1.2);
-      c.rotation.y = k % 2 ? Math.PI : 0;
-      if (rnd() < 0.85) world.add(c);
-      batch.add('#ffffff', 0.1, 0.01, 2.6, -23 + (k % 2) * 6 - 2.2 + 4.4 * (k % 2), 0.002, D - 15 + Math.floor(k / 2) * 3.2 + 1.6, false);
-    }
-    // Lamp posts along the yard.
-    for (let x = 4; x < W; x += 14) {
-      const g = new THREE.Group(); g.position.set(x, 0, D + 20.4); world.add(g);
+    const court = site.court || { x0: -15, x1: W + 15, depth: 22 };
+    const cw = court.x1 - court.x0, cmid = (court.x0 + court.x1) / 2;
+    plane(world, cw, court.depth, C.yard, cmid, -0.01, D + court.depth / 2);
+    // Lamp posts in the yard.
+    for (let x = court.x0 + 6; x < court.x1 - 4; x += 14) {
+      const g = new THREE.Group(); g.position.set(x, 0, D + Math.min(20.4, court.depth - 2)); world.add(g);
       cyl(g, 0.07, 5, '#9aa6b8', 0, 2.5, 0, 'y', 8);
       box(g, 0.9, 0.12, 0.25, '#9aa6b8', -0.4, 5, 0);
     }
 
-    batch.build(world);
+    // Neighbouring buildings: a flat roof outline, so they never hide anything.
+    for (const n of site.neighbors || []) {
+      plane(world, n.w, n.h, '#dfe4ec', n.x + n.w / 2, 0.0, n.y + n.h / 2);
+      outline(batch, '#c3cad6', n.x + n.w / 2, n.y + n.h / 2, n.w / 2, n.h / 2, 0.5);
+      if (n.label) floorText(world, n.label, n.x + n.w / 2, n.y + n.h / 2, 26, 3.2, { color: '#aab3c2' });
+    }
+
+    // Rail track: two rails on sleepers.
+    const track = (pts) => {
+      for (let k = 1; k < pts.length; k++) {
+        const [x0, y0] = pts[k - 1], [x1, y1] = pts[k];
+        const len = Math.hypot(x1 - x0, y1 - y0), ang = Math.atan2(y1 - y0, x1 - x0);
+        const ux = (x1 - x0) / len, uy = (y1 - y0) / len;
+        batch.add('#c7cdd6', len + 0.4, 0.01, 3.2, (x0 + x1) / 2, 0.0, (y0 + y1) / 2, false, -ang);  // ballast
+        for (const s of [-0.72, 0.72]) batch.add('#6b7587', len + 0.05, 0.12, 0.08, (x0 + x1) / 2 - uy * s, 0.08, (y0 + y1) / 2 + ux * s, false, -ang);
+        for (let d = 0.35; d < len; d += 0.9) batch.add('#8a7660', 0.25, 0.05, 2.4, x0 + ux * d, 0.03, y0 + uy * d, false, -ang);
+      }
+    };
+    if (site.rail) track(site.rail);
+    if (site.railMain) track([[site.railMain.x, site.railMain.y0], [site.railMain.x, site.railMain.y1]]);
+
+    // Street with lane dashes, and the parking lot.
+    if (site.road) {
+      const r = site.road, len = D + 500;
+      plane(world, r.w, len, C.road, r.x, -0.005, D / 2);
+      for (let z = D / 2 - len / 2; z < D / 2 + len / 2; z += 6) batch.add('#ffffff', 0.18, 0.01, 3, r.x, 0.002, z, false);
+      plane(world, 1.4, len, '#e9edf4', r.x - r.w / 2 - 1.2, 0.0, D / 2);
+      if (r.label) floorText(world, r.label, r.x + r.w / 4, D / 2, 12, 2.0, { color: '#c9d1de', rot: Math.PI / 2 });
+    } else {
+      plane(world, W + 120, 9, C.road, W / 2, -0.005, D + court.depth + 4.5);
+      for (let x = -50; x < W + 60; x += 6) batch.add('#ffffff', 3, 0.01, 0.18, x, 0.002, D + court.depth + 4.5, false);
+    }
+    const carColors = ['#f26d5b', '#5b7cf0', '#9b7cf0', '#ffffff', '#2cc3b5', '#f2c230'];
+    const p = site.parking || { x: -26, y: D - 16, w: 12, h: 20 };
+    plane(world, p.w, p.h, C.yard, p.x + p.w / 2, -0.005, p.y + p.h / 2);
+    let k = 0;
+    for (let x = p.x + 3; x < p.x + p.w - 2; x += 8) {
+      for (let z = p.y + 2; z < p.y + p.h - 2; z += 2.8) {
+        batch.add('#ffffff', 5, 0.01, 0.1, x + 2.5, 0.002, z - 1.4, false);
+        if (rnd() < 0.35) {
+          const c = makeCar(carColors[k++ % carColors.length]);
+          c.position.set(x + 2.5, 0, z); c.rotation.y = rnd() < 0.5 ? 0 : Math.PI;
+          world.add(c);
+        }
+      }
+    }
+
+    // Trees around the site, kept off the yard, the rail, the road and the parking.
+    const busy = (x, z) => (x > court.x0 - 3 && x < court.x1 + 3 && z > D - 1 && z < D + court.depth + 1)
+      || (x > p.x - 3 && x < p.x + p.w + 3 && z > p.y - 3 && z < p.y + p.h + 3)
+      || (site.road && Math.abs(x - site.road.x) < site.road.w / 2 + 3)
+      || (site.neighbors || []).some(n => x > n.x - 3 && x < n.x + n.w + 3 && z > n.y - 3 && z < n.y + n.h + 3)
+      || (site.railMain && Math.abs(x - site.railMain.x) < 4)
+      || (site.rail || []).some(([rx, rz]) => Math.hypot(rx - x, rz - z) < 6)
+      || pointInPolygonXY(m.outline, x, z, 4);
+    const treeAt = (x, z, s) => { if (busy(x, z)) return; const tr = makeTree(s); tr.position.set(x, 0, z); world.add(tr); };
+    for (let x = -30; x < W + 20; x += 11 + rnd() * 8) treeAt(x, -12 - rnd() * 6, 0.9 + rnd() * 0.5);
+    for (let z = -20; z < D + 150; z += 10 + rnd() * 7) { treeAt(-24 - rnd() * 5, z, 0.9 + rnd() * 0.5); treeAt((site.road ? site.road.x + site.road.w / 2 + 5 : W + 9) + rnd() * 4, z, 0.9 + rnd() * 0.5); }
+    for (let x = -10; x < W + 12; x += 11 + rnd() * 8) treeAt(x, D + Math.max(court.depth, ...(site.neighbors || []).map(n => n.y + n.h - D)) + 5 + rnd() * 3, 0.9 + rnd() * 0.5);
   }
 
   buildRack(batch, r) {
@@ -560,10 +689,12 @@ export class WarehouseScene {
 // Collects many small static boxes and merges them into one mesh per color.
 class Batch {
   constructor() { this.parts = new Map(); }
-  add(color, w, h, d, x, y, z, shadow = true) {
+  add(color, w, h, d, x, y, z, shadow = true, rotY = 0) {
     const key = color + (shadow ? '' : '|ns');
     if (!this.parts.has(key)) this.parts.set(key, { color, shadow, geos: [] });
-    this.parts.get(key).geos.push(new THREE.BoxGeometry(w, h, d).translate(x, y, z));
+    const g = new THREE.BoxGeometry(w, h, d);
+    if (rotY) g.rotateY(rotY);
+    this.parts.get(key).geos.push(g.translate(x, y, z));
   }
   build(parent) {
     for (const { color, shadow, geos } of this.parts.values()) {
@@ -641,6 +772,40 @@ function greyOf(material) {
     greyCache.set(material, g);
   }
   return greyCache.get(material);
+}
+
+// Inside the outline, or within `pad` meters of it?
+function pointInPolygonXY(poly, x, y, pad = 0) {
+  if (pointInPolygon(poly, x, y)) return true;
+  for (let i = 0, j = poly.length - 1; i < poly.length; j = i++) {
+    const [ax, ay] = poly[j], [bx, by] = poly[i], dx = bx - ax, dy = by - ay, L = dx * dx + dy * dy || 1;
+    const k = Math.max(0, Math.min(1, ((x - ax) * dx + (y - ay) * dy) / L));
+    if (Math.hypot(ax + dx * k - x, ay + dy * k - y) < pad) return true;
+  }
+  return false;
+}
+
+// Merge every mesh under `root` into one mesh per material and add those to
+// `parent`. For models that never move.
+function freeze(root, parent) {
+  root.updateMatrixWorld(true);
+  const byMat = new Map();
+  root.traverse(o => {
+    if (!o.isMesh) return;
+    let g = o.geometry.clone().applyMatrix4(o.matrixWorld);
+    if (g.index) g = g.toNonIndexed();
+    for (const k of Object.keys(g.attributes)) if (!['position', 'normal', 'uv'].includes(k)) g.deleteAttribute(k);
+    if (!g.attributes.uv) g.setAttribute('uv', new THREE.Float32BufferAttribute(new Float32Array(g.attributes.position.count * 2), 2));
+    const e = byMat.get(o.material) || { geos: [], shadow: false };
+    e.geos.push(g); e.shadow = e.shadow || o.castShadow;
+    byMat.set(o.material, e);
+  });
+  for (const [material, { geos, shadow }] of byMat) {
+    const mesh = new THREE.Mesh(mergeGeometries(geos), material);
+    mesh.castShadow = shadow; mesh.receiveShadow = true;
+    parent.add(mesh);
+    geos.forEach(g => g.dispose());
+  }
 }
 
 function mulberry(a) {

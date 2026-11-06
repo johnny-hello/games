@@ -67,6 +67,23 @@ function segPointDist(p, q, r) {
   return Math.hypot(p[0] + dx * t - r[0], p[1] + dy * t - r[1]);
 }
 
+// Is (x, y) inside the polygon [[x, y], ...]? (even-odd rule)
+export function pointInPolygon(poly, x, y) {
+  let inside = false;
+  for (let i = 0, j = poly.length - 1; i < poly.length; j = i++) {
+    const [xi, yi] = poly[i], [xj, yj] = poly[j];
+    if ((yi > y) !== (yj > y) && x < (xj - xi) * (y - yi) / (yj - yi) + xi) inside = !inside;
+  }
+  return inside;
+}
+
+// Signed area: positive when the points run clockwise on a floor plan (y down).
+export function polygonArea(poly) {
+  let a = 0;
+  for (let i = 0, j = poly.length - 1; i < poly.length; j = i++) a += poly[j][0] * poly[i][1] - poly[i][0] * poly[j][1];
+  return a / 2;
+}
+
 // ---------------------------------------------------------------- grid + A*
 
 // Occupancy grid over the floor with a "clearance" value per cell: the
@@ -99,6 +116,13 @@ export class Grid {
           this.blocked[this.idx(i, j)] = 1;
         }
       }
+    }
+  }
+  // Block every cell whose center is outside the floor outline.
+  blockOutside(poly) {
+    for (let j = 0; j < this.h; j++) for (let i = 0; i < this.w; i++) {
+      const [x, y] = this.center(i, j);
+      if (!pointInPolygon(poly, x, y)) this.blocked[this.idx(i, j)] = 1;
     }
   }
   blockEdges() {
