@@ -309,6 +309,7 @@ export class WarehouseScene {
 
     // Offices and other blocks.
     for (const o of m.obstacles) {
+      if (o.kind === 'stack') { this.buildStack(batch, o); continue; }
       const g = new THREE.Group(); g.position.set(o.x + o.w / 2, 0, o.y + o.h / 2); world.add(g);
       const floors = o.floors || 1, h = 3.2 * floors;
       box(g, o.w, h, o.h, C.office, 0, h / 2, 0);
@@ -331,6 +332,20 @@ export class WarehouseScene {
     batch.build(this.world);
     freeze(world, this.world);
     for (const w of this.walls) { const parts = new THREE.Group(); parts.add(...w.group.children); freeze(parts, w.group); }
+  }
+
+  // Floor-stacked pallets: rows of 1.2 m pallets stacked with wheel loads.
+  buildStack(batch, o) {
+    const nx = Math.max(1, Math.round(o.w / 1.2)), ny = Math.max(1, Math.round(o.h / 1.2));
+    const pw = o.w / nx, pd = o.h / ny, layers = Math.max(1, Math.round(o.height / 0.5));
+    const lh = o.height / layers;
+    for (let i = 0; i < nx; i++) for (let j = 0; j < ny; j++) {
+      const x = o.x + (i + 0.5) * pw, y = o.y + (j + 0.5) * pd;
+      for (let k = 0; k < layers; k++) {
+        batch.add(COLORS.palletWood, pw - 0.08, 0.1, pd - 0.08, x, k * lh + 0.05, y);
+        batch.add((i + j + k) % 3 ? '#2f3540' : '#c9ced6', pw - 0.14, lh - 0.12, pd - 0.14, x, k * lh + 0.1 + (lh - 0.12) / 2, y);
+      }
+    }
   }
 
   // A grade-level (drive-in) or rail door, drawn on its wall.

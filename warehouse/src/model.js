@@ -109,10 +109,11 @@ export function buildModel(layout) {
     model.homes.set(f.id, { x: c.x + Math.cos(hd) * off, y: c.y + Math.sin(hd) * off, heading: hd });
   }
 
-  for (const o of layout.obstacles || []) {
-    const box = obb(o.x + o.w / 2, o.y + o.h / 2, o.w / 2, o.h / 2);
-    model.obstacles.push({ ...o, box });
-    model.staticBoxes.push(box);
+  (layout.stacks || []).forEach((st, i) => model.obstacles.push({ ...st, id: `S${i + 1}`, kind: 'stack', height: st.height || layout.stackHeight || 2 }));
+  for (const o of layout.obstacles || []) model.obstacles.push({ ...o });
+  for (const o of model.obstacles) {
+    o.box = obb(o.x + o.w / 2, o.y + o.h / 2, o.w / 2, o.h / 2);
+    model.staticBoxes.push(o.box);
   }
 
   // Building columns on a regular grid. Columns inside or right next to a

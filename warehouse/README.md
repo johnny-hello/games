@@ -115,6 +115,7 @@ measured or scanned.
 - `columns` is the building's column grid. Columns in or right next to a
   rack, office, charger or dock lane are left out.
 - `chargers` are where idle forklifts park.
+- `stacks` are floor-stacked pallets, from an iPhone scan (see below).
 - `obstacles` are offices or anything else to drive around (`floors: 2`
   for a two-story office).
 - `site` is what is drawn around the building: truck court, the other
@@ -127,6 +128,30 @@ level 2, position a) and floor markings all follow from this file.
 > The outline comes from a public sale flyer. Keep anything that is not
 > public (the real rack layout, live forklift data, VSLAM feed addresses)
 > out of a public repository: move this folder to a private repo first.
+
+## Add the real floor from an iPhone scan
+
+Record a walk through the floor with **Stray Scanner** (free, iPhone with
+LiDAR), then turn it into floor stacks for `layout.js`:
+
+1. Unzip the recording somewhere outside the repository.
+2. Write an anchors file like `tools/scan/530e90bcfd.json`: where the start,
+   the corner and the end of your walk are on the layout (meters), and the
+   areas to leave alone (office, dock lanes, chargers).
+3. Run (needs Python with numpy and Pillow):
+
+```bash
+python3 warehouse/tools/scan/scan_to_stacks.py path/to/recording warehouse/tools/scan/RECORDING.json .
+```
+
+It prints a `stacks` list to paste into `layout.js`, and writes `map.png` to
+check the result. Then rebuild the bundle (`npm run build`).
+
+It is rough on purpose: the phone only sees the side of a stack it walks
+past, so each stack is drawn about one pallet deep. Starting and ending at a
+spot that is easy to find on the plan (office corner, dock door, column)
+makes the alignment better. Keep the recordings themselves out of the
+repository.
 
 ## Change the 3D models
 

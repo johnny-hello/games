@@ -1,0 +1,13 @@
+{
+  "note": "Test walk, 2026-11-08: north side of the office, south along its west wall, then west along the dock aisle. Anchors from the path drawn on the twin.",
+  "anchors": [
+    { "frame": "start", "at": [249.0, 14.0] },
+    { "frame": "corner", "at": [238.5, 44.0] },
+    { "frame": "end", "at": [221.0, 45.0] }
+  ],
+  "avoid": [
+    [240.6, 15.5, 16, 33],
+    [180, 42.5, 45, 9],
+    [224, 46.5, 13, 5]
+  ]
+}
