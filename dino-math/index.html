@@ -46,6 +46,22 @@
     button { font-size: 22px; min-width: 56px; padding: 8px 10px; }
     .overlay h2 { font-size: 22px; }
   }
+
+  /* phones: popups use the whole screen so nothing gets cut off */
+  button { touch-action: manipulation; }
+  @media (max-width: 700px), (max-height: 500px) {
+    .overlay { position: fixed; inset: 0; border-radius: 0; z-index: 10; justify-content: flex-start; padding: 24px 12px; }
+    .overlay > :first-child { margin-top: auto; }
+    .overlay > :last-child { margin-bottom: auto; }
+  }
+  /* phone sideways: hide extras so the game and buttons fit */
+  @media (max-height: 500px) {
+    h1, a.back, #help { display: none; }
+    #hud { font-size: 16px; padding: 2px 12px; }
+    canvas { max-height: calc(100vh - 110px); width: auto; max-width: 100%; margin: 0 auto; }
+    #pad { margin: 4px; }
+    #pad button { padding: 4px 10px; }
+  }
 </style>
 </head>
 <body>
