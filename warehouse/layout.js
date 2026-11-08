@@ -89,6 +89,20 @@ export default {
     { id: 'C4', x: 235.0, y: 50.6, heading: 270 },
   ],
 
+  // Floor-stacked pallets (wheel and tire stacks) found by scanning the floor
+  // with tools/scan/scan_to_stacks.py. Rough: the phone only sees the side of
+  // a stack facing the walk. Recording 530e90bcfd: around the office corner.
+  stacks: [
+    { x: 225.9, y: 41.1, w: 2.8, h: 2.0 },
+    { x: 230.6, y: 40.7, w: 1.0, h: 1.4 },
+    { x: 235.7, y: 17.4, w: 1.4, h: 1.2 },
+    { x: 236.5, y: 18.9, w: 1.4, h: 4.0 },
+    { x: 237.7, y: 37.4, w: 1.4, h: 4.2 },
+    { x: 238.5, y: 29.4, w: 1.4, h: 1.2 },
+    { x: 241.5, y: 13.6, w: 1.4, h: 1.8 },
+  ],
+  stackHeight: 2.0,
+
   // Solid blocks the forklifts must drive around (offices, ...).
   obstacles: [
     { id: 'Office', x: 241.2, y: 16.5, w: 14.2, h: 30.6, kind: 'office', floors: 2 },
