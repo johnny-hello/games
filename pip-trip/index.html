@@ -203,53 +203,48 @@ function numChoices(ans, count = 5) {
 // t = town index (0..6). Math is meant to challenge; words stay simple.
 function makeMath(t) {
   let q, a;
+  const k = rnd(0, 2);
   switch (t) {
-    case 0: { // + and - within 10
-      if (Math.random() < 0.5) { const x = rnd(1, 9), y = rnd(1, 10 - x); q = `${x} + ${y} = ?`; a = x + y; }
-      else { const x = rnd(3, 10), y = rnd(1, x); q = `${x} − ${y} = ?`; a = x - y; }
-      break;
-    }
-    case 1: { // within 20, missing number
-      const k = rnd(0, 2);
+    case 0: { // + and − within 20, missing number
       if (k === 0) { const x = rnd(5, 12), y = rnd(3, 20 - x); q = `${x} + ${y} = ?`; a = x + y; }
-      else if (k === 1) { const x = rnd(11, 20), y = rnd(2, 9); q = `${x} − ${y} = ?`; a = x - y; }
-      else { const s = pick([10, 10, 12, 15]), x = rnd(2, s - 2); q = `${x} + ? = ${s}`; a = s - x; }
+      else if (k === 1) { const x = rnd(11, 20), y = rnd(3, 9); q = `${x} − ${y} = ?`; a = x - y; }
+      else { const s = pick([10, 15, 20]), x = rnd(3, s - 3); q = `${x} + ? = ${s}`; a = s - x; }
       break;
     }
-    case 2: { // tens and ones, skip counting
-      const k = rnd(0, 2);
-      if (k === 0) { const x = rnd(1, 9) * 10, y = rnd(1, 9); q = `${x} + ${y} = ?`; a = x + y; }
-      else if (k === 1) { const x = rnd(1, 5) * 10, y = rnd(1, 4) * 10; q = `${x} + ${y} = ?`; a = x + y; }
-      else { const st = pick([2, 5, 10]), s = st * rnd(1, 4); q = `${s}, ${s + st}, ${s + 2 * st}, ?`; a = s + 3 * st; }
+    case 1: { // two-digit, no carrying; missing number
+      if (k === 0) { const x = rnd(21, 65), y = rnd(11, 99 - x); if ((x % 10) + (y % 10) > 9) return makeMath(t); q = `${x} + ${y} = ?`; a = x + y; }
+      else if (k === 1) { const x = rnd(35, 99), y = rnd(12, x - 10); if (y % 10 > x % 10) return makeMath(t); q = `${x} − ${y} = ?`; a = x - y; }
+      else { const s = rnd(13, 20), x = rnd(4, s - 4); q = `${s} − ? = ${x}`; a = s - x; }
       break;
     }
-    case 3: { // two-digit no carry, emoji stories
-      const k = rnd(0, 2);
-      if (k === 0) { const x = rnd(11, 45), y = rnd(11, 99 - x); const ok = (x % 10) + (y % 10) < 10; if (!ok) return makeMath(t); q = `${x} + ${y} = ?`; a = x + y; }
-      else if (k === 1) { const x = rnd(25, 99), y = rnd(11, x - 5); if (y % 10 > x % 10) return makeMath(t); q = `${x} − ${y} = ?`; a = x - y; }
-      else { const x = rnd(12, 19), y = rnd(2, 9); q = `${x} 🪵 − ${y} 🪵 = ?`; a = x - y; }
+    case 2: { // carrying / borrowing, skip counting
+      if (k === 0) { const x = rnd(18, 69), y = rnd(14, 99 - x); q = `${x} + ${y} = ?`; a = x + y; }
+      else if (k === 1) { const x = rnd(41, 99), y = rnd(15, x - 9); q = `${x} − ${y} = ?`; a = x - y; }
+      else { const st = pick([3, 4, 5, 10]) * pick([1, -1]), s = rnd(4, 9) * Math.abs(st) + (st < 0 ? 20 : 0); q = `${s}, ${s + st}, ${s + 2 * st}, ?`; a = s + 3 * st; }
       break;
     }
-    case 4: { // carrying, coins
-      const k = rnd(0, 2);
-      if (k === 0) { const x = rnd(15, 59), y = rnd(15, 40); q = `${x} + ${y} = ?`; a = x + y; }
-      else if (k === 1) { const x = rnd(40, 99), y = rnd(12, x - 8); q = `${x} − ${y} = ?`; a = x - y; }
-      else { const c = [10, 10, 5, 5, 1, 1, 1].slice(0, rnd(3, 6)); q = c.map(v => `🪙${v}`).join(' + ') + ' = ?'; a = c.reduce((s, v) => s + v, 0); }
+    case 3: { // three numbers, ×2 ×5 ×10, coins
+      if (k === 0) { const x = rnd(5, 25), y = rnd(5, 25), z = rnd(5, 25); q = `${x} + ${y} + ${z} = ?`; a = x + y + z; }
+      else if (k === 1) { const m = pick([2, 5, 10]), n = rnd(3, 10); q = `${n} × ${m} = ?`; a = n * m; }
+      else { const c = shuffle([25, 10, 10, 5, 5, 1, 1, 1]).slice(0, rnd(4, 6)); q = c.map(v => `🪙${v}`).join(' + ') + ' = ?'; a = c.reduce((s, v) => s + v, 0); }
       break;
     }
-    case 5: { // equal groups, x2 x5 x10
-      const k = rnd(0, 1);
-      const m = pick([2, 5, 10]), n = rnd(2, 6);
-      if (k === 0) { q = `${n} × ${m} = ?`; a = n * m; }
-      else { q = `${n} bags. ${m} 🐟 in each.\nHow many 🐟?`; a = n * m; }
-      break;
-    }
-    default: { // mix
-      const k = rnd(0, 3);
+    case 4: { // times tables, 3-digit +, missing ×
       if (k === 0) { const x = rnd(3, 10), y = rnd(3, 10); q = `${x} × ${y} = ?`; a = x * y; }
-      else if (k === 1) { const y = rnd(2, 10), r = rnd(2, 10); q = `${y * r} ÷ ${y} = ?`; a = r; }
-      else if (k === 2) { const x = rnd(35, 89), y = rnd(16, 99 - x); q = `${x} + ${y} = ?`; a = x + y; }
-      else { const x = rnd(50, 99), y = rnd(17, x - 9); q = `${x} − ${y} = ?`; a = x - y; }
+      else if (k === 1) { const x = rnd(110, 499), y = rnd(110, 499); q = `${x} + ${y} = ?`; a = x + y; }
+      else { const x = rnd(3, 9), y = rnd(3, 9); q = `${x} × ? = ${x * y}`; a = y; }
+      break;
+    }
+    case 5: { // division, 3-digit −, two steps
+      if (k === 0) { const y = rnd(3, 10), r = rnd(3, 10); q = `${y * r} ÷ ${y} = ?`; a = r; }
+      else if (k === 1) { const x = rnd(300, 900), y = rnd(120, x - 50); q = `${x} − ${y} = ?`; a = x - y; }
+      else { const x = rnd(3, 9), y = rnd(3, 9), z = rnd(2, 15); q = `${x} × ${y} + ${z} = ?`; a = x * y + z; }
+      break;
+    }
+    default: { // big mix
+      if (k === 0) { const x = rnd(12, 49), y = rnd(3, 9); q = `${x} × ${y} = ?`; a = x * y; }
+      else if (k === 1) { const y = rnd(4, 12), r = rnd(6, 12); q = `${y * r} ÷ ${y} = ?`; a = r; }
+      else { const x = rnd(4, 9), y = rnd(4, 9), z = rnd(5, x * y - 5); q = `${x} × ${y} − ${z} = ?`; a = x * y - z; }
     }
   }
   return { q, a, choices: numChoices(a) };
@@ -270,14 +265,22 @@ const SENTENCES = [
   ['A 🐦 can ___.', 'fly', ['swim', 'dig', 'read']],
   ['I sleep in a ___. 🛏️', 'bed', ['cup', 'car', 'tree']],
   ['The 🌙 comes at ___.', 'night', ['lunch', 'school', 'day']],
+  ['A 🐝 makes ___.', 'honey', ['milk', 'bread', 'rain']],
+  ['I wear a ___ on my head. 🧢', 'hat', ['sock', 'shoe', 'cup']],
+  ['We see with our ___. 👀', 'eyes', ['ears', 'feet', 'hands']],
+  ['Rain comes from the ___. 🌧️', 'clouds', ['grass', 'house', 'sea']],
+  ['The 🐢 is very ___.', 'slow', ['fast', 'loud', 'tall']],
+  ['An 🐘 is very ___.', 'big', ['small', 'thin', 'blue']],
+  ['I brush my ___. 🪥', 'teeth', ['hair', 'shoes', 'book']],
+  ['In winter it is ___. ⛄', 'cold', ['hot', 'green', 'sunny']],
 ];
 
 function makeRead(t) {
-  if (t >= 3 && Math.random() < 0.6) {
+  if (t >= 1 && Math.random() < 0.6) {
     const [s, a, w] = pick(SENTENCES);
     return { kind: 'sentence', q: s, a, choices: shuffle([a, ...w]) };
   }
-  const level = WORDS[Math.min(2, Math.floor(t / 2))];
+  const level = WORDS[Math.min(2, t + 1)];
   const [word, emo] = pick(level);
   const others = shuffle(level.filter(x => x[0] !== word)).slice(0, 3).map(x => x[0]);
   return { kind: 'word', q: emo, a: word, choices: shuffle([word, ...others]) };
@@ -285,14 +288,19 @@ function makeRead(t) {
 
 const PICS = ['🔴', '🔵', '🟡', '🟢', '⭐', '🍎', '🐶', '🌸'];
 function makePattern(t) {
-  if (t >= 3 && Math.random() < 0.4) { // number pattern
-    const st = pick(t >= 5 ? [3, 4, 5, 10] : [2, 5, 10]), s = rnd(1, 5) * st;
-    const seq = [s, s + st, s + 2 * st, s + 3 * st];
-    const a = s + 4 * st;
+  if (t >= 1 && Math.random() < 0.5) { // number pattern
+    let seq, a;
+    if (t >= 4 && Math.random() < 0.5) { // growing steps: +1, +2, +3 ...
+      const s = rnd(1, 10); seq = [s, s + 1, s + 3, s + 6]; a = s + 10;
+    } else {
+      const st = pick(t >= 3 ? [3, 4, 6, 7, 9] : [2, 3, 5, 10]) * (t >= 2 && Math.random() < 0.5 ? -1 : 1);
+      const s = rnd(2, 6) * Math.abs(st) + (st < 0 ? 5 * Math.abs(st) : 0);
+      seq = [s, s + st, s + 2 * st, s + 3 * st]; a = s + 4 * st;
+    }
     return { show: seq.join(', ') + ', ?', a: String(a), choices: numChoices(a, 4).map(String) };
   }
   const [A, B, C] = shuffle([...PICS]).slice(0, 3);
-  const units = t < 2 ? [[A, B]] : t < 4 ? [[A, B], [A, A, B], [A, B, B]] : [[A, B, C], [A, A, B], [A, B, B, C], [A, B, C, C]];
+  const units = t < 1 ? [[A, A, B], [A, B, B], [A, B, C]] : [[A, B, C], [A, A, B, C], [A, B, B, C], [A, B, C, C], [A, B, C, B]];
   const unit = pick(units);
   const len = unit.length * 2 + rnd(0, unit.length - 1);
   const seq = Array.from({ length: len }, (_, i) => unit[i % unit.length]);
@@ -304,14 +312,14 @@ function makePattern(t) {
 
 // coding: build a grid with a guaranteed path from 🐶 to 🔑
 function makeCode(t) {
-  const cols = t === 0 ? 4 : t < 3 ? 5 : t < 5 ? 6 : 7;
-  const rows = t === 0 ? 3 : t < 4 ? 4 : 5;
+  const cols = [5, 6, 6, 7, 7, 8, 8][t];
+  const rows = [3, 4, 4, 5, 5, 5, 5][t];
   let r = rnd(0, rows - 1), c = 0;
   const path = [[r, c]];
   const seen = new Set([r + ',' + c]);
   while (c < cols - 1) {
-    const opts = [[0, 1], [0, 1]];
-    if (t >= 1) { opts.push([1, 0], [-1, 0]); }
+    const opts = [[0, 1], [0, 1], [1, 0], [-1, 0]];
+    if (t >= 3) opts.push([1, 0], [-1, 0]); // twistier paths later
     const [dr, dc] = pick(opts);
     const nr = r + dr, nc = c + dc;
     if (nr < 0 || nr >= rows || seen.has(nr + ',' + nc)) continue;
@@ -319,20 +327,20 @@ function makeCode(t) {
     r = nr; c = nc; seen.add(r + ',' + c); path.push([r, c]);
   }
   const rocks = new Set();
-  const density = 0.15 + t * 0.05;
+  const density = 0.25 + t * 0.05;
   for (let i = 0; i < rows; i++) for (let j = 0; j < cols; j++) {
     if (!seen.has(i + ',' + j) && Math.random() < density) rocks.add(i + ',' + j);
   }
-  // shortest block count (with repeat ×2/×3 allowed from town 3)
+  // shortest block count (repeat ×2/×3 from town 2, block limit from town 3)
   let runs = [];
   for (let i = 1; i < path.length; i++) {
     const d = dirName(path[i][0] - path[i - 1][0], path[i][1] - path[i - 1][1]);
     if (runs.length && runs[runs.length - 1][0] === d) runs[runs.length - 1][1]++;
     else runs.push([d, 1]);
   }
-  const useRepeat = t >= 2;
+  const useRepeat = t >= 1;
   const minBlocks = useRepeat ? runs.reduce((s, [, n]) => s + Math.ceil(n / 3), 0) : path.length - 1;
-  const limit = t >= 4 ? minBlocks + (t >= 6 ? 0 : 1) : null;
+  const limit = t >= 2 ? minBlocks + (t >= 4 ? 0 : 1) : null;
   return { rows, cols, start: path[0], goal: path[path.length - 1], path, rocks, useRepeat, limit };
 }
 function dirName(dr, dc) { return dr === -1 ? 'U' : dr === 1 ? 'D' : dc === -1 ? 'L' : 'R'; }
@@ -379,7 +387,7 @@ function newSlot(i) {
   let name = (prompt('What is your name?') || '').trim().slice(0, 12);
   if (!name) name = 'Player ' + (i + 1);
   slot = i;
-  save = { name, town: 0, gates: [false, false, false], stars: 0, x: 80, done: false, introSeen: false };
+  save = { name, town: 0, gates: [false, false, false], stars: 0, townStars: 0, x: 80, done: false, introSeen: false };
   saves[i] = save; writeSaves();
   $('startScreen').classList.remove('show');
   enterTown();
@@ -387,7 +395,10 @@ function newSlot(i) {
 function loadSlot(i) {
   slot = i; save = saves[i];
   $('startScreen').classList.remove('show');
-  if (save.done) { save.town = 0; save.gates = [false, false, false]; save.x = 80; save.done = false; save.introSeen = false; }
+  if (save.done) { save.town = 0; save.gates = [false, false, false]; save.x = 80; save.done = false; save.introSeen = false; save.townStars = save.stars; }
+  if (save.townStars === undefined) save.townStars = save.stars;
+  // older saves could start a new town at the far right
+  if (!save.gates.some(Boolean)) save.x = 80;
   enterTown();
 }
 
@@ -549,12 +560,7 @@ function showChoice(ask, item, size) {
         gotIt();
       } else {
         b.classList.add('wrong'); b.disabled = true;
-        pz.wrong++;
-        $('pzMsg').textContent = 'Try again! 💛';
-        if (pz.wrong === 2) { // hint: take away more wrong answers
-          [...row.children].filter(x => !x.disabled && String(x.textContent) !== String(item.a)).slice(0, 2).forEach(x => { x.disabled = true; });
-          $('pzMsg').textContent = 'Try again! 💛 You can do it!';
-        }
+        if (missed('Oops! 1 more try. 💛')) [...row.children].forEach(x => x.disabled = true);
       }
     };
     row.appendChild(b);
@@ -612,10 +618,8 @@ function showCode(g) {
   body.appendChild(row);
 
   function fail(msg) {
-    running = false;
-    pz.wrong++;
-    $('pzMsg').textContent = msg;
-    setTimeout(() => draw(g.start[0], g.start[1], pz.wrong >= 2), 700);
+    if (missed(msg + ' 1 more try. 💛')) return;
+    setTimeout(() => { running = false; draw(g.start[0], g.start[1]); }, 700);
   }
   function run() {
     if (!program.length) return;
@@ -626,19 +630,39 @@ function showCode(g) {
     let [r, c] = g.start, i = 0;
     const tick = () => {
       if (i >= steps.length) {
-        if (r === g.goal[0] && c === g.goal[1]) { gotIt(); } else fail('Not the 🔑. Try again! 💛');
+        if (r === g.goal[0] && c === g.goal[1]) { gotIt(); } else fail('Not the 🔑.');
         return;
       }
       const [dr, dc] = DELTA[steps[i++]];
       r += dr; c += dc;
-      if (r < 0 || r >= g.rows || c < 0 || c >= g.cols) return fail('Oops! Off the map. Try again! 💛');
-      if (g.rocks.has(r + ',' + c)) return fail('Bonk! A 🪨 rock. Try again! 💛');
-      draw(r, c, pz.wrong >= 2);
+      if (r < 0 || r >= g.rows || c < 0 || c >= g.cols) return fail('Off the map!');
+      if (g.rocks.has(r + ',' + c)) return fail('Bonk! A 🪨 rock.');
+      draw(r, c);
       if (r === g.goal[0] && c === g.goal[1] && i === steps.length) { setTimeout(gotIt, 300); return; }
       setTimeout(tick, 350);
     };
     setTimeout(tick, 200);
   }
+}
+
+// a miss gives 1 more try; a 2nd miss sends Pip back to the start of the town.
+// returns true when the town restarts.
+function missed(msg) {
+  pz.wrong++;
+  if (pz.wrong < 2) { $('pzMsg').textContent = msg; return false; }
+  $('pzMsg').textContent = 'Oh no! 💥';
+  setTimeout(restartTown, 1000);
+  return true;
+}
+
+function restartTown() {
+  $('puzzleScreen').classList.remove('show');
+  save.gates = [false, false, false];
+  save.stars = save.townStars;
+  player.x = 80; save.x = 80;
+  persist(); updateHud();
+  mode = 'walk';
+  talk([['💥', 'Oh no! 2 misses.'], ['🐶', 'Back to the start.'], ['💪', 'You can do it!']], () => enterTown());
 }
 
 function gotIt() {
@@ -667,7 +691,9 @@ function finishTown() {
       showMap(true);
       return;
     }
-    save.town++; save.gates = [false, false, false]; save.x = 80; save.introSeen = false;
+    save.town++; save.gates = [false, false, false]; save.introSeen = false;
+    save.townStars = save.stars;
+    player.x = 80; // start the next town on the left
     persist();
     showMap(false);
   });
