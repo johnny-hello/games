@@ -221,46 +221,46 @@ function makeMath(t) {
   let q, a;
   const k = rnd(0, 2);
   switch (t) {
-    case 0: { // + and − within 20, missing number
-      if (k === 0) { const x = rnd(5, 12), y = rnd(3, 20 - x); q = `${x} + ${y} = ?`; a = x + y; }
-      else if (k === 1) { const x = rnd(11, 20), y = rnd(3, 9); q = `${x} − ${y} = ?`; a = x - y; }
-      else { const s = pick([10, 15, 20]), x = rnd(3, s - 3); q = `${x} + ? = ${s}`; a = s - x; }
+    case 0: { // two-digit with carrying / borrowing, missing number
+      if (k === 0) { const x = rnd(27, 69), y = rnd(15, 99 - x); q = `${x} + ${y} = ?`; a = x + y; }
+      else if (k === 1) { const x = rnd(52, 99), y = rnd(18, x - 12); q = `${x} − ${y} = ?`; a = x - y; }
+      else { const s = rnd(45, 99), x = rnd(13, s - 12); q = `? + ${x} = ${s}`; a = s - x; }
       break;
     }
-    case 1: { // two-digit, no carrying; missing number
-      if (k === 0) { const x = rnd(21, 65), y = rnd(11, 99 - x); if ((x % 10) + (y % 10) > 9) return makeMath(t); q = `${x} + ${y} = ?`; a = x + y; }
-      else if (k === 1) { const x = rnd(35, 99), y = rnd(12, x - 10); if (y % 10 > x % 10) return makeMath(t); q = `${x} − ${y} = ?`; a = x - y; }
-      else { const s = rnd(13, 20), x = rnd(4, s - 4); q = `${s} − ? = ${x}`; a = s - x; }
+    case 1: { // three numbers, times tables, 3-digit +
+      if (k === 0) { const x = rnd(15, 49), y = rnd(15, 49), z = rnd(15, 49); q = `${x} + ${y} + ${z} = ?`; a = x + y + z; }
+      else if (k === 1) { const x = rnd(4, 10), y = rnd(4, 10); q = `${x} × ${y} = ?`; a = x * y; }
+      else { const x = rnd(150, 499), y = rnd(150, 499); q = `${x} + ${y} = ?`; a = x + y; }
       break;
     }
-    case 2: { // carrying / borrowing, skip counting
-      if (k === 0) { const x = rnd(18, 69), y = rnd(14, 99 - x); q = `${x} + ${y} = ?`; a = x + y; }
-      else if (k === 1) { const x = rnd(41, 99), y = rnd(15, x - 9); q = `${x} − ${y} = ?`; a = x - y; }
-      else { const st = pick([3, 4, 5, 10]) * pick([1, -1]), s = rnd(4, 9) * Math.abs(st) + (st < 0 ? 20 : 0); q = `${s}, ${s + st}, ${s + 2 * st}, ?`; a = s + 3 * st; }
+    case 2: { // 3-digit −, missing ×, division
+      if (k === 0) { const x = rnd(400, 950), y = rnd(150, x - 60); q = `${x} − ${y} = ?`; a = x - y; }
+      else if (k === 1) { const x = rnd(4, 10), y = rnd(4, 10); q = `${x} × ? = ${x * y}`; a = y; }
+      else { const y = rnd(4, 10), r = rnd(4, 10); q = `${y * r} ÷ ${y} = ?`; a = r; }
       break;
     }
-    case 3: { // three numbers, ×2 ×5 ×10, coins
-      if (k === 0) { const x = rnd(5, 25), y = rnd(5, 25), z = rnd(5, 25); q = `${x} + ${y} + ${z} = ?`; a = x + y + z; }
-      else if (k === 1) { const m = pick([2, 5, 10]), n = rnd(3, 10); q = `${n} × ${m} = ?`; a = n * m; }
-      else { const c = shuffle([25, 10, 10, 5, 5, 1, 1, 1]).slice(0, rnd(4, 6)); q = c.map(v => `🪙${v}`).join(' + ') + ' = ?'; a = c.reduce((s, v) => s + v, 0); }
+    case 3: { // two steps, 2-digit × 1-digit
+      if (k === 0) { const x = rnd(4, 9), y = rnd(4, 9), z = rnd(6, 25); q = `${x} × ${y} + ${z} = ?`; a = x * y + z; }
+      else if (k === 1) { const x = rnd(5, 9), y = rnd(5, 9), z = rnd(6, x * y - 6); q = `${x} × ${y} − ${z} = ?`; a = x * y - z; }
+      else { const x = rnd(13, 39), y = rnd(3, 6); q = `${x} × ${y} = ?`; a = x * y; }
       break;
     }
-    case 4: { // times tables, 3-digit +, missing ×
-      if (k === 0) { const x = rnd(3, 10), y = rnd(3, 10); q = `${x} × ${y} = ?`; a = x * y; }
-      else if (k === 1) { const x = rnd(110, 499), y = rnd(110, 499); q = `${x} + ${y} = ?`; a = x + y; }
-      else { const x = rnd(3, 9), y = rnd(3, 9); q = `${x} × ? = ${x * y}`; a = y; }
+    case 4: { // big division, borrowing across zero, brackets
+      if (k === 0) { const y = rnd(6, 12), r = rnd(6, 12); q = `${y * r} ÷ ${y} = ?`; a = r; }
+      else if (k === 1) { const x = pick([300, 400, 500, 600, 700, 800, 900]) + rnd(0, 9), y = rnd(125, x - 50); q = `${x} − ${y} = ?`; a = x - y; }
+      else { const x = rnd(3, 9), y = rnd(3, 9), z = rnd(3, 8); q = `(${x} + ${y}) × ${z} = ?`; a = (x + y) * z; }
       break;
     }
-    case 5: { // division, 3-digit −, two steps
-      if (k === 0) { const y = rnd(3, 10), r = rnd(3, 10); q = `${y * r} ÷ ${y} = ?`; a = r; }
-      else if (k === 1) { const x = rnd(300, 900), y = rnd(120, x - 50); q = `${x} − ${y} = ?`; a = x - y; }
-      else { const x = rnd(3, 9), y = rnd(3, 9), z = rnd(2, 15); q = `${x} × ${y} + ${z} = ?`; a = x * y + z; }
+    case 5: { // 2-digit × 2-digit, 3-digit ÷ 1-digit, fractions
+      if (k === 0) { const x = rnd(11, 19), y = rnd(11, 19); q = `${x} × ${y} = ?`; a = x * y; }
+      else if (k === 1) { const y = rnd(3, 8), r = rnd(15, 45); q = `${y * r} ÷ ${y} = ?`; a = r; }
+      else { const d = pick([2, 3, 4, 5]), r = rnd(6, 25); q = `1/${d} of ${d * r} = ?`; a = r; }
       break;
     }
-    default: { // big mix
-      if (k === 0) { const x = rnd(12, 49), y = rnd(3, 9); q = `${x} × ${y} = ?`; a = x * y; }
-      else if (k === 1) { const y = rnd(4, 12), r = rnd(6, 12); q = `${y * r} ÷ ${y} = ?`; a = r; }
-      else { const x = rnd(4, 9), y = rnd(4, 9), z = rnd(5, x * y - 5); q = `${x} × ${y} − ${z} = ?`; a = x * y - z; }
+    default: { // order of operations, missing number in two steps
+      if (k === 0) { const x = rnd(5, 30), y = rnd(3, 9), z = rnd(3, 9); q = `${x} + ${y} × ${z} = ?`; a = x + y * z; }
+      else if (k === 1) { const x = rnd(21, 49), y = rnd(12, 25); q = `${x} × ${y} = ?`; a = x * y; }
+      else { const m = rnd(4, 9), n = rnd(4, 12), z = rnd(2, 15); q = `? × ${m} + ${z} = ${n * m + z}`; a = n; }
     }
   }
   return { q, a, choices: numChoices(a) };
@@ -292,11 +292,11 @@ const SENTENCES = [
 ];
 
 function makeRead(t) {
-  if (t >= 1 && Math.random() < 0.6) {
+  if (Math.random() < 0.7) {
     const [s, a, w] = pick(SENTENCES);
     return { kind: 'sentence', q: s, a, choices: shuffle([a, ...w]) };
   }
-  const level = WORDS[Math.min(2, t + 1)];
+  const level = WORDS[2];
   const [word, emo] = pick(level);
   const others = shuffle(level.filter(x => x[0] !== word)).slice(0, 3).map(x => x[0]);
   return { kind: 'word', q: emo, a: word, choices: shuffle([word, ...others]) };
@@ -304,10 +304,12 @@ function makeRead(t) {
 
 const PICS = ['🔴', '🔵', '🟡', '🟢', '⭐', '🍎', '🐶', '🌸'];
 function makePattern(t) {
-  if (t >= 1 && Math.random() < 0.5) { // number pattern
+  if (Math.random() < 0.6) { // number pattern
     let seq, a;
-    if (t >= 4 && Math.random() < 0.5) { // growing steps: +1, +2, +3 ...
-      const s = rnd(1, 10); seq = [s, s + 1, s + 3, s + 6]; a = s + 10;
+    if (t >= 4 && Math.random() < 0.4) { // doubling
+      const s = rnd(2, 6); seq = [s, s * 2, s * 4, s * 8]; a = s * 16;
+    } else if (t >= 2 && Math.random() < 0.5) { // growing steps: +1, +2, +3 ... (or +2, +4, +6)
+      const s = rnd(1, 20), g = t >= 5 ? 2 : 1; seq = [s, s + g, s + 3 * g, s + 6 * g]; a = s + 10 * g;
     } else {
       const st = pick(t >= 3 ? [3, 4, 6, 7, 9] : [2, 3, 5, 10]) * (t >= 2 && Math.random() < 0.5 ? -1 : 1);
       const s = rnd(2, 6) * Math.abs(st) + (st < 0 ? 5 * Math.abs(st) : 0);
@@ -316,7 +318,7 @@ function makePattern(t) {
     return { show: seq.join(', ') + ', ?', a: String(a), choices: numChoices(a, 4).map(String) };
   }
   const [A, B, C] = shuffle([...PICS]).slice(0, 3);
-  const units = t < 1 ? [[A, A, B], [A, B, B], [A, B, C]] : [[A, B, C], [A, A, B, C], [A, B, B, C], [A, B, C, C], [A, B, C, B]];
+  const units = [[A, B, C], [A, A, B, C], [A, B, B, C], [A, B, C, C], [A, B, C, B], [A, A, B, B, C]];
   const unit = pick(units);
   const len = unit.length * 2 + rnd(0, unit.length - 1);
   const seq = Array.from({ length: len }, (_, i) => unit[i % unit.length]);
@@ -328,8 +330,8 @@ function makePattern(t) {
 
 // coding: build a grid with a guaranteed path from 🐶 to 🔑
 function makeCode(t) {
-  const cols = [5, 6, 6, 7, 7, 8, 8][t];
-  const rows = [3, 4, 4, 5, 5, 5, 5][t];
+  const cols = [6, 7, 7, 8, 8, 8, 8][t];
+  const rows = [4, 4, 5, 5, 5, 6, 6][t];
   let r = rnd(0, rows - 1), c = 0;
   const path = [[r, c]];
   const seen = new Set([r + ',' + c]);
@@ -343,20 +345,20 @@ function makeCode(t) {
     r = nr; c = nc; seen.add(r + ',' + c); path.push([r, c]);
   }
   const rocks = new Set();
-  const density = 0.25 + t * 0.05;
+  const density = 0.3 + t * 0.04;
   for (let i = 0; i < rows; i++) for (let j = 0; j < cols; j++) {
     if (!seen.has(i + ',' + j) && Math.random() < density) rocks.add(i + ',' + j);
   }
-  // shortest block count (repeat ×2/×3 from town 2, block limit from town 3)
+  // shortest block count (repeat ×2/×3 always, block limit from town 2, exact from town 4)
   let runs = [];
   for (let i = 1; i < path.length; i++) {
     const d = dirName(path[i][0] - path[i - 1][0], path[i][1] - path[i - 1][1]);
     if (runs.length && runs[runs.length - 1][0] === d) runs[runs.length - 1][1]++;
     else runs.push([d, 1]);
   }
-  const useRepeat = t >= 1;
+  const useRepeat = true;
   const minBlocks = useRepeat ? runs.reduce((s, [, n]) => s + Math.ceil(n / 3), 0) : path.length - 1;
-  const limit = t >= 2 ? minBlocks + (t >= 4 ? 0 : 1) : null;
+  const limit = t >= 1 ? minBlocks + (t >= 3 ? 0 : 1) : null;
   return { rows, cols, start: path[0], goal: path[path.length - 1], path, rocks, useRepeat, limit };
 }
 function dirName(dr, dc) { return dr === -1 ? 'U' : dr === 1 ? 'D' : dc === -1 ? 'L' : 'R'; }
@@ -532,7 +534,7 @@ let pz = null;
 function startPuzzle(gate) {
   mode = 'puzzle';
   const type = gateType(save.town, gate);
-  const need = type === 'math' ? 3 : type === 'code' ? 1 : 2;
+  const need = type === 'math' ? 4 : type === 'code' ? 1 : 3;
   pz = { gate, type, need, solved: 0, wrong: 0 };
   $('puzzleScreen').classList.add('show');
   nextPuzzle();
